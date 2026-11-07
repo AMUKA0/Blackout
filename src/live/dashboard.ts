@@ -18,6 +18,8 @@ const ROLE: Record<ActorId, string> = { S1: "Scout 1", S2: "Scout 2", S3: "Scout
 const DEVICE_OF: Record<ActorId, DeviceId> = { S1: "A", R1: "A", S2: "B", S3: "B", R2: "B", S4: "phone" };
 const DEVICE_NAME: Record<DeviceId, string> = { A: "Laptop A", B: "Laptop B", phone: "Phone" };
 const TEAM: Record<DeviceId, string> = { A: "Laptop A team", B: "Laptop B team", phone: "Scout 4" };
+// Team colours, used only while the hub is offline.
+const TEAM_COLOR: Record<DeviceId, string> = { A: "#8fb0e8", B: "#4fd3c4", phone: "#f4b6c2" };
 const NS = "http://www.w3.org/2000/svg";
 const $ = (id: string) => document.getElementById(id)!;
 $("brand").innerHTML = BRAND_MARK;
@@ -233,10 +235,16 @@ function drawMoving(m: Observe, now: number) {
   const linksLive = m.links.filter(([x, y]) => online(byId.get(x)) && online(byId.get(y)));
   const linked = (id: ActorId) => linksLive.some(([x, y]) => x === id || y === id);
 
+  // Hub down: coverage glow off (no relay to show), each team in its colour.
   layers.halos.replaceChildren();
+  layers.groups.replaceChildren();
   for (const a of m.actors) {
     if (!a.online || a.crashedAt !== undefined) continue;
     const p = at(a.id);
+    if (hubOffline) {
+      layers.groups.appendChild(el("circle", { cx: p.x, cy: p.y, r: 22, class: "m-team", stroke: TEAM_COLOR[a.device] }));
+      continue;
+    }
     const r = CONFIG.radioRange * CELL;
     layers.halos.appendChild(el("circle", { cx: p.x, cy: p.y, r, class: "m-halo" }));
     layers.halos.appendChild(el("circle", { cx: p.x, cy: p.y, r, class: "m-range" }));
@@ -246,7 +254,9 @@ function drawMoving(m: Observe, now: number) {
   linksLive.forEach(([x, y], i) => {
     const a = at(x);
     const b = at(y);
-    layers.links.appendChild(el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "m-link" }));
+    const line = el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "m-link" });
+    if (hubOffline) line.setAttribute("stroke", TEAM_COLOR[byId.get(x)!.device]);
+    layers.links.appendChild(line);
     if (reduceMotion) return;
     // A packet travelling the link: knowledge being shared.
     const len = Math.hypot(b.x - a.x, b.y - a.y);
@@ -308,37 +318,11 @@ function drawMap(m: Observe) {
   if (!world) return;
   current = m;
 
-  // Hub down: mast turns red, and each team is outlined as its own island.
+  // Hub down: the mast turns red. Teams are shown by colour (rings and links
+  // drawn per frame in drawMoving), with a key in the corner. No filters:
+  // they are what made this state slow.
   document.getElementById("hub-mast")?.setAttribute("class", hubOffline ? "m-hub off" : "m-hub");
-  layers.groups.replaceChildren();
   layers.labels.replaceChildren(); // every label below is redrawn each update
-  if (hubOffline) {
-    const placed: { x: number; y: number; w: number }[] = [];
-    for (const d of ["A", "B", "phone"] as DeviceId[]) {
-      const members = m.actors.filter((a) => a.device === d && a.online && a.crashedAt === undefined);
-      if (members.length === 0) continue;
-      for (const [cls, filter, r] of [["m-group-fill", "storm", 1.6], ["m-group-edge", "storm-edge", 1.6]] as const) {
-        const wrap = el("g", { class: cls });
-        const blob = el("g", { filter: `url(#${filter})` });
-        for (const a of members) blob.appendChild(el("circle", { cx: cx(a.pos), cy: cy(a.pos), r: CELL * r }));
-        wrap.appendChild(blob);
-        layers.groups.appendChild(wrap);
-      }
-      // Tag sits by the group's centre; nudged down if it would hit another tag.
-      const mx = members.reduce((s, a) => s + cx(a.pos), 0) / members.length;
-      const my = members.reduce((s, a) => s + cy(a.pos), 0) / members.length;
-      const text = `${TEAM[d]} · on its own`;
-      const w = text.length * 6.6 + 22;
-      const x = Math.min(Math.max(mx - w / 2, 0), world.size * CELL - w);
-      let y = Math.min(Math.max(my + CELL * 0.9, 4), world.size * CELL - 26);
-      while (placed.some((p) => Math.abs(p.y - y) < 26 && x < p.x + p.w && p.x < x + w)) y = Math.min(y + 28, world.size * CELL - 26);
-      placed.push({ x, y, w });
-      const label = el("g", { class: "m-group-label" });
-      label.appendChild(el("rect", { x, y, width: w, height: 22, rx: 11 }));
-      label.appendChild(el("text", { x: x + 11, y: y + 15.5 }, text));
-      layers.labels.appendChild(label);
-    }
-  }
 
   // Storm cells over teams HQ cannot hear: two merged bands, like isobars.
   layers.zones.replaceChildren();

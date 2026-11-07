@@ -116,9 +116,12 @@
   .m-hub.off .wave { display: none; }
   .m-hub.off .x { display: block; }
   @keyframes wave { 0% { opacity: .9; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.4); } }
-  .m-group-fill { fill: var(--link); opacity: .07; }
-  .m-group-edge { fill: var(--link); opacity: .75; }
-  .m-group-label rect { fill: var(--link); } .m-group-label text { fill: var(--bg); font: 800 12px var(--font); }
+  .m-team { fill: none; stroke-width: 2.5; opacity: .95; }
+  /* Key for team colours, shown only while the hub is offline */
+  .team-key { position: absolute; left: 34px; top: 30px; display: none; align-items: center; gap: 14px; padding: 7px 13px; border-radius: 999px; background: rgba(10, 20, 51, .9); font-size: 12.5px; font-weight: 700; color: var(--text-2); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+  .team-key b { color: #ffb3bd; font-weight: 800; letter-spacing: .02em; }
+  .team-key i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  body.huboff .team-key { display: flex; }
   .ev.down .what { color: var(--red); font-weight: 700; }
   .ev.recovered .what { color: var(--link); }
   .results { display: none; gap: 7px; width: min(470px, 42vw); }
@@ -304,7 +307,7 @@
   </section>
 
   <main>
-    <div class="map-wrap"><svg id="map" role="img" aria-label="Map of actors, radio links and survivors as HQ knows them"></svg><span class="map-note">Hub offline: showing each device's own telemetry for the demo</span></div>
+    <div class="map-wrap"><svg id="map" role="img" aria-label="Map of actors, radio links and survivors as HQ knows them"></svg><div class="team-key" aria-live="polite"><b>Hub offline · teams on their own</b><span><i style="background:#8fb0e8"></i>Laptop A</span><span><i style="background:#4fd3c4"></i>Laptop B</span><span><i style="background:#f4b6c2"></i>Scout 4</span></div><span class="map-note">Showing each device's own telemetry for the demo</span></div>
     <section class="side">
       <div>
         <div class="contact-head">
