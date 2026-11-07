@@ -1,0 +1,13 @@
+{
+  "seed": 3,
+  "model": "gemini-4-argon",
+  "commander": "Autonomously sweep assigned sectors to locate and extract all twelve survivors, using physical runners to base (7,7) and nearby rescuers to bridge communication blackouts.",
+  "intents": {
+    "S1": "Sweep NW; if cut off, keep sweeping, relay survivor coords directly to R1, and return to base (7,7) every 15 ticks.",
+    "S2": "Sweep NE; when cut off, keep sweeping, carry survivor locations directly to R2, and visit base (7,7) every 20 ticks.",
+    "S3": "Sweep SW; when cut off, keep sweeping, deliver survivor coords to R1 or base (7,7) every 15 ticks to reconnect.",
+    "S4": "Sweep SE; while dark, keep sweeping until 3 survivors found or tick 40, then carry news to R2 and base.",
+    "R1": "Rescue in West half avoiding water; if cut off, sweep nearby dry land and check base (7,7) for scout reports.",
+    "R2": "Rescue in East half avoiding water; when cut off, follow S2/S4 leads and pass base (7,7) when queue is empty."
+  }
+}

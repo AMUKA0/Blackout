@@ -143,11 +143,9 @@ function decideRescuer(
 
   const candidates = rescueCandidates(world, state, tick);
   const current = candidates.find((c) => c.survivor === state.target);
-  let chosen = current;
-  if (!chosen && candidates.length > 0) {
-    const override = pick?.(candidates.slice(0, 3));
-    chosen = candidates.find((c) => c.survivor === override) ?? candidates[0];
-  }
+  // An override (Gemini) may only choose among the top feasible options.
+  const override = candidates.length > 0 ? pick?.(candidates.slice(0, 3)) : undefined;
+  const chosen = candidates.find((c) => c.survivor === override) ?? current ?? candidates[0];
 
   // Release an old claim we are walking away from.
   let k = state.k;

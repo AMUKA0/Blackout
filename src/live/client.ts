@@ -37,6 +37,9 @@ export class HubClient {
     this.makeSocket = makeSocket;
   }
 
+  get httpBase() {
+    return this.url.replace(/^ws/, "http");
+  }
   hubNow = () => Date.now() + this.offset;
   tick = () => (this.mission ? tickAt(this.hubNow(), this.mission.t0) : -1);
   get online() {

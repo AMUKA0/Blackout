@@ -40,7 +40,15 @@ export type FromHub =
   | { type: "status"; devices: DeviceStatus[]; started: Mission | null }
   | { type: "relay"; from: ActorId; to: ActorId[]; tick: number; k: Knowledge }
   | { type: "truth"; survivor: number; tick: number; by: ActorId }
-  | { type: "observe"; tick: number; actors: ObservedActor[]; links: [ActorId, ActorId][]; events: (StepEvent & { device: DeviceId; late: boolean })[] };
+  | {
+      type: "observe";
+      tick: number;
+      actors: ObservedActor[];
+      links: [ActorId, ActorId][];
+      events: (StepEvent & { device: DeviceId; late: boolean; arrived: number })[];
+      gemini: { state: string; calls: number; failures: number };
+      plan: { commander: string; intents: Partial<Record<ActorId, string>> } | null;
+    };
 
 export type Sample = { offset: number; rtt: number };
 export function offsetFrom(t1: number, server: number, t3: number): Sample {

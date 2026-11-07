@@ -29,10 +29,15 @@
   h2 { font-size: 1rem; margin: 16px 0 6px; }
   ul { list-style: none; padding: 0; margin: 0; font-size: .92rem; }
   li { padding: 3px 0; } li.stale { opacity: .55; } li.late { color: var(--cut); font-weight: 600; }
+  .badge { font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #fff; border: 2px solid var(--link); }
+  .badge.ok { border-color: var(--save); color: var(--save); } .badge.error { border-color: var(--cut); color: var(--cut); }
+  #radio { margin-left: auto; font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; border: 0; background: var(--navy); color: #fff; cursor: pointer; }
+  #radio[disabled] { opacity: .6; cursor: default; }
+  .commander { margin: 0 0 6px; font-style: italic; }
 </style>
 </head>
 <body>
-  <header><h1>Blackout HQ</h1><span id="tick"></span><span id="mission"></span></header>
+  <header><h1>Blackout HQ</h1><span id="tick"></span><span id="mission"></span><span id="gemini" class="badge">Gemini idle</span><button id="radio">Turn on radio</button></header>
   <div class="layout">
     <svg id="map" role="img" aria-label="Map of actors, links and survivors"></svg>
     <section>
@@ -41,6 +46,8 @@
       <ul id="reasons"></ul>
       <h2>Events</h2>
       <ul id="events"></ul>
+      <h2>Standing orders (gemini-4-argon, written before the mission)</h2>
+      <ul id="orders"></ul>
     </section>
   </div>
   <script type="module" src="/js/dashboard.js"></script>

@@ -1,5 +1,5 @@
 import { CONFIG } from "../shared/config.ts";
-import { initialState, type ActorState } from "../shared/brain.ts";
+import { initialState, type ActorState, type Candidate } from "../shared/brain.ts";
 import { DEMO_FAULTS } from "../shared/faults.ts";
 import { emptyKnowledge, merge, type Knowledge } from "../shared/knowledge.ts";
 import { actActor, expireSurvivors, newTruth, revealSurvivors, senseActor, type StepEvent, type TruthMap } from "../shared/step.ts";
@@ -13,6 +13,15 @@ import type { HubClient } from "./client.ts";
 // the hub only delivers between actors in radio range.
 
 export type NodeLog = { tick: number; text: string };
+
+type GeminiSlot = {
+  pending: boolean;
+  sig: string;
+  down?: boolean;
+  answer?: { survivor: number; reason: string; tick: number };
+  chosen?: number;
+  chosenReason?: string;
+};
 
 export class LiveNode {
   world: World;
@@ -119,11 +128,18 @@ export class LiveNode {
     const snapshot = this.actors.map((s) => s.k);
     this.actors = this.actors.map((s) => ({ ...s, k: snapshot.reduce((a, b) => merge(a, b), s.k) }));
 
-    // 4. Decide and act
+    // 4. Decide and act. Rescuers may take Gemini's pick among their top 3.
     this.actors = this.actors.map((s) => {
-      const r = actActor(this.world, this.truth, s, tick, { isolated: this.isolated(s.spec.id, tick), offline });
+      const g = this.gemini.get(s.spec.id) ?? { pending: false, sig: "" };
+      this.gemini.set(s.spec.id, g);
+      const pick = s.spec.role === "rescuer" ? (c: Candidate[]) => this.pickWithGemini(s, tick, c, g) : undefined;
+      const r = actActor(this.world, this.truth, s, tick, { isolated: this.isolated(s.spec.id, tick), offline, pick });
       this.emit(r.events);
-      if (r.reason) this.reasons.set(s.spec.id, r.reason);
+      if (r.reason) {
+        const viaGemini = g.chosen !== undefined && r.s.target === g.chosen;
+        const label = s.spec.role === "scout" ? "" : viaGemini ? "Gemini: " : g.down || offline ? "Rules (no Gemini): " : "Rules: ";
+        this.reasons.set(s.spec.id, label + (viaGemini ? g.chosenReason! : r.reason));
+      }
       if (r.completed) this.pendingTruth.push({ type: "truth", ...r.completed });
       return r.s;
     });
@@ -145,6 +161,49 @@ export class LiveNode {
       for (const t of this.pendingTruth.splice(0)) this.client.send(t);
     }
     this.opts.onTick?.(tick);
+  }
+
+  // Gemini runs asynchronously. The actor never waits: it keeps its rule
+  // choice, and a valid answer that arrives within 4 ticks may redirect it.
+  private gemini = new Map<ActorId, GeminiSlot>();
+
+  private pickWithGemini(s: ActorState, tick: number, cands: Candidate[], g: GeminiSlot): number | undefined {
+    const sig = cands.map((c) => c.survivor).join(",");
+    if (sig !== g.sig && cands.length >= 2 && this.client.online && !g.pending) {
+      g.sig = sig;
+      g.pending = true;
+      const others = (Object.entries(s.k.seen) as [ActorId, { pos: { x: number; y: number }; tick: number }][])
+        .filter(([id]) => id !== s.spec.id)
+        .map(([id, v]) => {
+          const target = Object.entries(s.k.claims).find(([, byActor]) => byActor[id] && !byActor[id]!.released)?.[0];
+          return { id, pos: v.pos, target: target ? +target : undefined, ageTicks: tick - v.tick };
+        });
+      const body = {
+        actor: s.spec.id,
+        tick,
+        pos: s.pos,
+        candidates: cands.map((c) => ({ ...c, pos: s.k.found[c.survivor].pos })),
+        others,
+      };
+      fetch(`${this.client.httpBase}/api/decide`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const d = (await r.json()) as { survivor: number; reason: string };
+          g.answer = { survivor: d.survivor, reason: d.reason, tick };
+          g.down = false;
+        })
+        .catch(() => (g.down = true))
+        .finally(() => (g.pending = false));
+    }
+    const a = g.answer;
+    if (a && tick - a.tick <= 4 && cands.some((c) => c.survivor === a.survivor)) {
+      g.answer = undefined; // apply once, never thrash
+      g.chosen = a.survivor;
+      g.chosenReason = a.reason;
+      this.note(tick, `${s.spec.id} Gemini picks survivor ${a.survivor}: ${a.reason}`);
+      return a.survivor;
+    }
+    return undefined;
   }
 
   private emit(events: StepEvent[]) {

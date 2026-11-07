@@ -1,6 +1,7 @@
 import { generateWorld } from "../shared/world.ts";
 import type { World } from "../shared/types.ts";
 import type { FromHub, ObservedActor } from "../net/protocol.ts";
+import { HqRadio } from "./dashboard-audio.ts";
 
 // HQ view. It only knows what reaches the hub, so actors on a device that is
 // offline are drawn as ghosts at their last known position.
@@ -62,11 +63,36 @@ function drawMap(actors: ObservedActor[], links: [string, string][]) {
   }
 }
 
+let radio: HqRadio | null = null;
+$("radio").onclick = async () => {
+  const ctx = new AudioContext();
+  await ctx.resume();
+  const r = new HqRadio(ctx);
+  $("radio").textContent = "Loading voices...";
+  await r.preload();
+  radio = r;
+  $("radio").textContent = "Radio on";
+  $("radio").setAttribute("disabled", "");
+};
+
 function connect() {
   const ws = new WebSocket(`ws://${location.host}`);
   ws.onopen = () => ws.send(JSON.stringify({ type: "hello", device: "dashboard" }));
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data) as FromHub;
+    if (m.type === "status") radio?.onStatus(m);
+    if (m.type === "observe") {
+      radio?.onObserve(m);
+      const g = m.gemini;
+      $("gemini").textContent = g.state === "ok" ? `Gemini live · ${g.calls} calls` : g.state === "error" ? `Gemini unreachable · rules only` : "Gemini idle";
+      $("gemini").className = `badge ${g.state}`;
+      $("orders").innerHTML = m.plan
+        ? `<p class="commander">${m.plan.commander}</p>` +
+          Object.entries(m.plan.intents)
+            .map(([id, t]) => `<li><b>${id}</b> ${t}</li>`)
+            .join("")
+        : "<li>No standing orders loaded.</li>";
+    }
     if (m.type === "status") {
       if (m.started && m.started.seed !== seed) {
         seed = m.started.seed;

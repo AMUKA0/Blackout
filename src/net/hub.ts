@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
+import { decide as geminiDecide, geminiStatus, type DecideRequest, type Plan } from "./gemini.ts";
 import { networkInterfaces } from "node:os";
 import { extname } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -19,9 +20,22 @@ const lastSeen = new Map<DeviceId, { at: number; tick: number }>();
 const sockets = new Map<DeviceId, WebSocket>();
 const dashboards = new Set<WebSocket>();
 const latest = new Map<ActorId, ObservedActor>();
-const recentEvents: (StepEvent & { device: DeviceId; late: boolean })[] = [];
+const recentEvents: (StepEvent & { device: DeviceId; late: boolean; arrived: number })[] = [];
 const truth: { survivor: number; tick: number; by: ActorId }[] = [];
 let started: Mission | null = null;
+let plan: Plan | null = null;
+
+function loadPlan(seed: number) {
+  const file = `plans/plan-${seed}.json`;
+  plan = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Plan) : null;
+  console.log(plan ? `loaded Argon standing orders from ${file}` : `no ${file}; run: node scripts/plan.ts ${seed}`);
+}
+
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  let body = "";
+  for await (const chunk of req) body += chunk;
+  return JSON.parse(body);
+}
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mp3": "audio/mpeg", ".json": "application/json" };
 const ROUTES: Record<string, string> = { "/": "public/dashboard.html", "/phone": "public/phone.html" };
@@ -31,6 +45,7 @@ function startMission() {
   latest.clear();
   truth.length = 0;
   recentEvents.length = 0;
+  loadPlan(SEED);
   broadcastAll({ type: "start", ...started });
   console.log(`mission starts in 3s, seed ${SEED}`);
 }
@@ -40,6 +55,22 @@ const http = createServer((req, res) => {
   if (req.method === "POST" && url === "/api/start") {
     startMission();
     res.writeHead(204).end();
+    return;
+  }
+  if (req.method === "POST" && url === "/api/decide") {
+    readJson(req)
+      .then((body) => {
+        const r = body as DecideRequest;
+        return geminiDecide({ ...r, intent: plan?.intents[r.actor] });
+      })
+      .then((d) => {
+        console.log(`gemini ${d.ms}ms -> survivor ${d.survivor}: ${d.reason}`);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(d));
+      })
+      .catch((e) => {
+        console.log(`gemini failed: ${(e as Error).message}`);
+        res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ error: (e as Error).message }));
+      });
     return;
   }
   const file = ROUTES[url] ?? (url.startsWith("/js/") || url.startsWith("/audio/") ? `public${url}` : null);
@@ -118,13 +149,13 @@ wss.on("connection", (ws) => {
           // Whoever finished first rescued them, however late the report arrived.
           const i = recentEvents.findIndex((x) => x.type === "rescued" && x.survivor === e.survivor);
           if (i >= 0) {
-            const first = recentEvents[i] as Extract<StepEvent, { type: "rescued" }> & { device: DeviceId; late: boolean };
+            const first = recentEvents[i] as Extract<StepEvent, { type: "rescued" }> & { device: DeviceId; late: boolean; arrived: number };
             if (e.tick < first.tick || (e.tick === first.tick && e.actor < first.actor)) {
-              recentEvents[i] = { tick: first.tick, type: "wasted", actor: first.actor, survivor: first.survivor, device: first.device, late: first.late };
+              recentEvents[i] = { tick: first.tick, type: "wasted", actor: first.actor, survivor: first.survivor, device: first.device, late: first.late, arrived: first.arrived };
             } else ev = { tick: e.tick, type: "wasted", actor: e.actor, survivor: e.survivor };
           }
         }
-        recentEvents.push({ ...ev, device: m.device, late: m.tick - e.tick > 2 });
+        recentEvents.push({ ...ev, device: m.device, late: m.tick - e.tick > 2, arrived: m.tick });
         if (recentEvents.length > 60) recentEvents.shift();
       }
       // Deliver each actor's state to the actors on other devices in range.
@@ -161,7 +192,9 @@ setInterval(() => {
   const tick = started ? tickAt(Date.now(), started.t0) : -1;
   const { links } = currentLinks(tick);
   const actors = [...latest.values()].map((a) => ({ ...a, online: online(a.device) }));
-  dashboards.forEach((d) => send(d, { type: "observe", tick, actors, links, events: recentEvents.slice(-30) }));
+  const gemini = { state: geminiStatus.state, calls: geminiStatus.calls, failures: geminiStatus.failures };
+  const p = plan ? { commander: plan.commander, intents: plan.intents } : null;
+  dashboards.forEach((d) => send(d, { type: "observe", tick, actors, links, events: recentEvents.slice(-30), gemini, plan: p }));
 }, HEARTBEAT_MS);
 
 let lastLine = "";
