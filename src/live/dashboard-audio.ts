@@ -10,7 +10,14 @@ import { Radio } from "./radio.ts";
 type Observe = Extract<FromHub, { type: "observe" }>;
 type Status = Extract<FromHub, { type: "status" }>;
 
-const PHRASE: Partial<Record<string, ActorPhrase>> = { found: "found", rescued: "rescued", conflict: "yield", wasted: "wasted" };
+const PHRASE: Partial<Record<string, ActorPhrase>> = {
+  found: "found",
+  rescued: "rescued",
+  conflict: "yield",
+  wasted: "wasted",
+  down: "mayday",
+  recovered: "recovered",
+};
 
 export class HqRadio {
   radio: Radio;
@@ -113,7 +120,13 @@ export class HqRadio {
     }
     for (const e of live) {
       const phrase = PHRASE[e.type];
-      if (phrase && "actor" in e) this.radio.say(callClips(e.actor, phrase, e.survivor));
+      if (!phrase || !("actor" in e)) continue;
+      // A mayday jumps the queue, then HQ explains what happens next.
+      if (e.type === "down") {
+        this.radio.say(callClips(e.actor, phrase), true);
+        this.radio.say([clipUrl("HQ", "droneDown")], false, 12000);
+      } else if (e.type === "recovered") this.radio.say(callClips(e.actor, phrase), false, 12000);
+      else this.radio.say(callClips(e.actor, phrase, e.survivor));
     }
   }
 }

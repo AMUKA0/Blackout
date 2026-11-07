@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEMO_FAULTS } from "../shared/faults.ts";
+import { SIM_FAULTS } from "../shared/faults.ts";
 import { runSim } from "./engine.ts";
 
 test("same seed and faults give the same run", () => {
-  const a = runSim({ seed: 3, condition: "mesh", faults: DEMO_FAULTS });
-  const b = runSim({ seed: 3, condition: "mesh", faults: DEMO_FAULTS });
+  const a = runSim({ seed: 3, condition: "mesh", faults: SIM_FAULTS });
+  const b = runSim({ seed: 3, condition: "mesh", faults: SIM_FAULTS });
   assert.deepEqual(a.events, b.events);
   assert.equal(a.rescued, b.rescued);
 });
 
 test("mesh actors converge to the same knowledge after reconnect", () => {
   for (let seed = 1; seed <= 20; seed++) {
-    assert.ok(runSim({ seed, condition: "mesh", faults: DEMO_FAULTS }).converged, `seed ${seed}`);
+    assert.ok(runSim({ seed, condition: "mesh", faults: SIM_FAULTS }).converged, `seed ${seed}`);
   }
 });
 
 test("no survivor is rescued twice", () => {
   for (let seed = 1; seed <= 30; seed++) {
-    const r = runSim({ seed, condition: "mesh", faults: DEMO_FAULTS });
+    const r = runSim({ seed, condition: "mesh", faults: SIM_FAULTS });
     const ids = r.events.filter((e) => e.type === "rescued").map((e) => ("survivor" in e ? e.survivor : -1));
     assert.equal(new Set(ids).size, ids.length, `seed ${seed}`);
   }

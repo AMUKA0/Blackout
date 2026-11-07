@@ -8,7 +8,7 @@ import { extname } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { applyFault } from "../sim/engine.ts";
 import { CONFIG } from "../shared/config.ts";
-import { DEMO_FAULTS } from "../shared/faults.ts";
+import { LINK_CUTS } from "../shared/faults.ts";
 import { radioLinks, type StepEvent } from "../shared/step.ts";
 import type { ActorId, DeviceId } from "../shared/types.ts";
 import { DEAD_AFTER_MS, HEARTBEAT_MS, PORT, tickAt, type DeviceStatus, type FromHub, type Mission, type ObservedActor, type ToHub } from "./protocol.ts";
@@ -69,6 +69,12 @@ function describe(e: StepEvent): string {
   if (e.type === "rescued") return `${e.actor} rescued survivor ${e.survivor}${e.isolated ? " while cut off" : ""}`;
   if (e.type === "conflict") return `${e.actor} yielded survivor ${e.survivor} to ${e.winner}`;
   if (e.type === "wasted") return `${e.actor} reached survivor ${e.survivor} after someone else (wasted trip)`;
+  if (e.type === "down") return `${e.actor} crashed at ${String.fromCharCode(65 + e.pos.x)}${e.pos.y + 1} (mayday)`;
+  if (e.type === "recovered") {
+    return e.reports > 0
+      ? `${e.actor} recovered ${e.reports} survivor reports from ${e.from}'s wreck and took over its sector`
+      : `${e.actor} reached ${e.from}'s wreck (no survivor reports on it) and took over its sector`;
+  }
   return `survivor ${e.survivor} lost`;
 }
 
@@ -142,6 +148,22 @@ const http = createServer((req, res) => {
     res.writeHead(204).end();
     return;
   }
+  if (req.method === "POST" && url === "/api/crash") {
+    // Operator crashes a drone: tell the device that hosts it.
+    readJson(req)
+      .then((body) => {
+        const actor = (body as { actor?: ActorId }).actor;
+        const host = actor ? latest.get(actor)?.device : undefined;
+        if (!actor || !host || !actor.startsWith("S")) throw new Error("unknown drone");
+        const sock = sockets.get(host);
+        if (!sock || sock.readyState !== sock.OPEN) throw new Error(`${host} is not connected`);
+        send(sock, { type: "crash", actor });
+        console.log(`crash ${actor} sent to ${host}`);
+        res.writeHead(204).end();
+      })
+      .catch((e) => res.writeHead(409, { "content-type": "application/json" }).end(JSON.stringify({ error: (e as Error).message })));
+    return;
+  }
   if (req.method === "POST" && url === "/api/n8n/toggle") {
     n8n.setBlocked(!n8n.blocked);
     console.log(n8n.blocked ? "n8n link BLOCKED (simulated outage), queueing" : "n8n link restored, replaying queue");
@@ -189,9 +211,9 @@ const online = (d: DeviceId) => {
 function currentLinks(tick: number) {
   const cut = new Set<string>();
   const off = new Set<DeviceId>();
-  for (const f of DEMO_FAULTS) if (f.tick <= tick && !("device" in f)) applyFault(f, cut, off);
+  for (const f of LINK_CUTS) if (f.tick <= tick && !("device" in f)) applyFault(f, cut, off);
   for (const d of DEVICES) if (!online(d)) off.add(d);
-  const actors = [...latest.values()].map((a) => ({ id: a.id, device: a.device, pos: a.pos }));
+  const actors = [...latest.values()].map((a) => ({ id: a.id, device: a.device, pos: a.pos, down: a.crashedAt !== undefined && tick > a.crashedAt }));
   // Scripted cuts between actors on devices HQ can still hear.
   const known = new Map(actors.map((a) => [a.id, a]));
   const cuts = [...cut]

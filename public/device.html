@@ -17,10 +17,15 @@
   body { background: var(--bg); color: var(--text); font: 500 16px/1.35 "Barlow", system-ui, sans-serif; font-variant-numeric: tabular-nums; display: grid; grid-template-rows: auto auto 1fr; transition: background-color .5s; }
   body.off { background: #1b1206; }
   ::selection { background: var(--link); color: var(--bg); }
-  header { display: flex; align-items: baseline; gap: 18px; padding: 18px 28px 6px; }
-  header b { font: 800 26px "Barlow SC", sans-serif; }
-  header span { color: var(--text-2); font-weight: 600; }
+  header { display: flex; align-items: center; gap: 14px; padding: 16px 28px 8px; }
+  header .brand .brand-mark { width: 30px; height: 30px; display: block; }
+  header .names { display: grid; }
+  header .names b { font: 800 22px/1 "Barlow SC", sans-serif; letter-spacing: .02em; }
+  header .names span { color: var(--text-2); font-weight: 600; font-size: 14px; }
   header .clock { margin-left: auto; font: 700 26px "Barlow SC", sans-serif; color: var(--text); }
+  .crash { border: 0; border-radius: 999px; padding: 7px 14px; font: 700 13px "Barlow", sans-serif; color: #ff5d71; background: rgba(255, 93, 113, .13); cursor: pointer; }
+  .crash:hover { background: rgba(255, 93, 113, .24); } .crash[disabled] { opacity: .6; cursor: default; }
+  .unit.down h2, .unit.down .doing { color: #ff8796; }
   .band { margin: 8px 0 0; padding: 14px 28px; background: #101f4b; transition: background-color .5s, color .5s; }
   .band h1 { margin: 0; font: 800 clamp(28px, 3.4vw, 48px)/1.05 "Barlow SC", sans-serif; }
   .band p { margin: 2px 0 0; font-weight: 600; opacity: .8; }
@@ -37,7 +42,7 @@
 </style>
 </head>
 <body>
-  <header><b id="title">Blackout</b><span id="sub">this laptop's actors</span><span class="clock" id="clock">t–</span></header>
+  <header><span class="brand" id="brand"></span><span class="names"><b>Blackout</b><span id="title">This laptop</span></span><span class="clock" id="clock">t–</span></header>
   <section class="band"><h1 id="headline">Connecting to the hub</h1><p id="subline">Waiting for the mission to start.</p></section>
   <main class="fleet" id="fleet"><p class="empty">No actors yet. Start the mission on the HQ dashboard.</p></main>
   <script type="module" src="/js/device.js"></script>

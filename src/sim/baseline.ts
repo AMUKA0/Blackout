@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { DEMO_FAULTS } from "../shared/faults.ts";
+import { SIM_FAULTS } from "../shared/faults.ts";
 import type { Condition } from "../shared/types.ts";
 import { runSim, type RunResult } from "./engine.ts";
 
@@ -9,11 +9,11 @@ import { runSim, type RunResult } from "./engine.ts";
 
 const SEEDS = Number(process.argv[2] ?? 50);
 const conditions: Condition[] = ["central", "independent", "mesh"];
-const reconnectTick = Math.max(...DEMO_FAULTS.filter((f) => f.kind === "radioOn").map((f) => f.tick));
+const reconnectTick = Math.max(...SIM_FAULTS.filter((f) => f.kind === "radioOn").map((f) => f.tick));
 
 const results: Record<Condition, RunResult[]> = { central: [], independent: [], mesh: [] };
 for (let seed = 1; seed <= SEEDS; seed++) {
-  for (const c of conditions) results[c].push(runSim({ seed, condition: c, faults: DEMO_FAULTS }));
+  for (const c of conditions) results[c].push(runSim({ seed, condition: c, faults: SIM_FAULTS }));
 }
 
 const pct = (r: RunResult) => (100 * r.rescued) / r.total;

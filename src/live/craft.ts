@@ -27,6 +27,28 @@ export function craftSvg(id: ActorId): string {
   </svg>`;
 }
 
+// A crashed drone: broken frame, snapped rotors, a red cross and rising smoke.
+// Deliberately a different silhouette from a working or offline drone.
+export function wreckSvg(id: ActorId): string {
+  return `<svg class="craft-svg wreck-svg" viewBox="-70 -70 140 140" role="img" aria-label="Crashed drone ${id}">
+    <g class="smoke"><circle cx="6" cy="-30" r="9"/><circle cx="-4" cy="-44" r="12"/><circle cx="8" cy="-58" r="15"/></g>
+    <g class="debris" transform="rotate(-18)">
+      <line x1="0" y1="0" x2="-21" y2="-21" class="arm"/><line x1="0" y1="0" x2="15" y2="-8" class="arm broken"/>
+      <line x1="0" y1="0" x2="-14" y2="17" class="arm broken"/><line x1="0" y1="0" x2="21" y2="21" class="arm"/>
+      <circle cx="-21" cy="-21" r="13" class="rotor broken"/><circle cx="21" cy="21" r="13" class="rotor broken"/>
+      <path d="M26 -14 l9 -5 M-24 24 l-6 8 M30 2 l6 4" class="shard"/>
+      <circle r="15" class="hull"/>
+      <path d="M-7 -7 7 7 M7 -7 -7 7" class="cross"/>
+    </g>
+    <text y="34" class="craft-id wreck-id">${id} DOWN</text>
+  </svg>`;
+}
+
+// The Blackout mark: three linked nodes, one link cut, the isolated node pink.
+export const BRAND_MARK = `<svg class="brand-mark" viewBox="0 0 28 28" aria-hidden="true"><g fill="none" stroke-linecap="round">
+  <path d="M7.2 19.6 12.8 9.6M8.6 21.4h4.2" stroke="#8fb0e8" stroke-width="2"/><path d="m17.2 19.2 2.6 2.6m0-2.6-2.6 2.6" stroke="#ff5d71" stroke-width="2"/>
+  <circle cx="6" cy="21.4" r="3" fill="#eef2fb"/><circle cx="14" cy="7.4" r="3" fill="#eef2fb"/><circle cx="22.8" cy="21.4" r="3" fill="#f4b6c2"/></g></svg>`;
+
 // Keeps a smoothed heading from position changes; holds it while stationary.
 export class Heading {
   private last = new Map<string, Pos>();
@@ -59,7 +81,18 @@ export const CRAFT_CSS = `
 .craft-svg .wake { fill: none; stroke: var(--craft-accent, #8fb0e8); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 3 7; animation: wake .6s linear infinite; opacity: .7; }
 .craft-svg .craft-id { fill: var(--craft-ink, #0a1433); font: 800 15px "Barlow", system-ui, sans-serif; text-anchor: middle; dominant-baseline: central; }
 .craft-still .blades, .craft-still .wake { animation: none; }
+.wreck-svg .smoke circle { fill: #8a92a8; opacity: 0; animation: smoke 2.4s ease-out infinite; }
+.wreck-svg .smoke circle:nth-child(2) { animation-delay: .8s; } .wreck-svg .smoke circle:nth-child(3) { animation-delay: 1.6s; }
+.wreck-svg .arm { stroke: #5a4650; stroke-width: 5; stroke-linecap: round; }
+.wreck-svg .arm.broken { stroke-dasharray: 9 5; }
+.wreck-svg .rotor { fill: none; stroke: #6d5a64; stroke-width: 2.4; }
+.wreck-svg .rotor.broken { stroke-dasharray: 22 12; }
+.wreck-svg .shard { stroke: #ff5d71; stroke-width: 2.4; stroke-linecap: round; }
+.wreck-svg .hull { fill: #2a1a22; stroke: #ff5d71; stroke-width: 3; }
+.wreck-svg .cross { stroke: #ff5d71; stroke-width: 3.5; stroke-linecap: round; }
+.wreck-svg .wreck-id { fill: #ff5d71; font-size: 13px; letter-spacing: .06em; }
+@keyframes smoke { 0% { opacity: 0; transform: translateY(14px) scale(.6); } 30% { opacity: .55; } 100% { opacity: 0; transform: translateY(-12px) scale(1.25); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes wake { to { stroke-dashoffset: -10; } }
-@media (prefers-reduced-motion: reduce) { .craft-svg .blades, .craft-svg .wake { animation: none; } .craft-turn { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .craft-svg .blades, .craft-svg .wake, .wreck-svg .smoke circle { animation: none; } .wreck-svg .smoke circle { opacity: .35; } .craft-turn { transition: none; } }
 `;

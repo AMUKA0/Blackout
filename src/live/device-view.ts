@@ -12,12 +12,12 @@ export type DeviceViewState = {
   link: string; // client state: online, radio off, offline...
   tick: number;
   offlineSince: number | null;
-  actors: { id: string; pos: Pos; mode: string; reason: string; found: number; rescued: number }[];
+  actors: { id: string; pos: Pos; mode: string; reason: string; found: number; rescued: number; crashedAt?: number }[];
 };
 
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".woff2": "font/woff2" };
 
-export function startDeviceView(port: number, getState: () => DeviceViewState) {
+export function startDeviceView(port: number, getState: () => DeviceViewState, onCrash: (actor: string) => void = () => {}) {
   const http = createServer((req, res) => {
     const url = (req.url ?? "/").split("?")[0];
     const file = url === "/" ? "public/device.html" : url.startsWith("/js/") || url.startsWith("/fonts/") ? `public${url}` : null;
@@ -33,6 +33,13 @@ export function startDeviceView(port: number, getState: () => DeviceViewState) {
   wss.on("connection", (ws) => {
     clients.add(ws);
     ws.on("close", () => clients.delete(ws));
+    // The page's crash buttons work with the Wi-Fi off: they never leave this laptop.
+    ws.on("message", (raw) => {
+      try {
+        const m = JSON.parse(String(raw)) as { crash?: string };
+        if (m.crash) onCrash(m.crash);
+      } catch {}
+    });
   });
   setInterval(() => {
     const msg = JSON.stringify(getState());

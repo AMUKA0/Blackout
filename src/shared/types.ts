@@ -36,4 +36,5 @@ export type Condition = "central" | "independent" | "mesh";
 // Faults are the scripted timeline. The live demo runs the same list.
 export type Fault =
   | { tick: number; kind: "cut" | "restore"; a: ActorId; b: ActorId }
-  | { tick: number; kind: "radioOff" | "radioOn"; device: DeviceId };
+  | { tick: number; kind: "radioOff" | "radioOn"; device: DeviceId }
+  | { tick: number; kind: "crash"; actor: ActorId };

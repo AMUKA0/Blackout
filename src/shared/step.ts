@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.ts";
-import { decide, type ActorState, type Candidate } from "./brain.ts";
+import { decide, NAME, RECOVER_RANGE, type ActorState, type Candidate } from "./brain.ts";
 import { cheb, euclid, samePos } from "./geo.ts";
 import type { ActorId, ActorSpec, DeviceId, Pos, World } from "./types.ts";
 
@@ -14,7 +14,19 @@ export type StepEvent =
   | { tick: number; type: "rescued"; actor: ActorId; survivor: number; isolated: boolean }
   | { tick: number; type: "expired"; survivor: number }
   | { tick: number; type: "conflict"; actor: ActorId; winner: ActorId; survivor: number }
-  | { tick: number; type: "wasted"; actor: ActorId; survivor: number };
+  | { tick: number; type: "wasted"; actor: ActorId; survivor: number }
+  | { tick: number; type: "down"; actor: ActorId; survivor: 0; pos: Pos }
+  | { tick: number; type: "recovered"; actor: ActorId; survivor: 0; from: ActorId; reports: number };
+
+// A drone goes down: it stops where it is and sends one last mayday. After
+// this tick its radio only reaches someone who comes to the wreck.
+export function crashActor(s: ActorState, tick: number): { s: ActorState; event: StepEvent } {
+  const k = { ...s.k, down: { ...s.k.down, [s.spec.id]: { pos: s.pos, tick, by: s.spec.id } } };
+  return {
+    s: { ...s, k, crashedAt: tick, mode: "down", target: undefined, rescuingUntil: undefined },
+    event: { tick, type: "down", actor: s.spec.id, survivor: 0, pos: s.pos },
+  };
+}
 
 export const newTruth = (world: World): TruthMap => new Map(world.survivors.map((s) => [s.id, { status: "hidden" } as Truth]));
 
@@ -39,6 +51,7 @@ export function expireSurvivors(world: World, truth: TruthMap, tick: number): St
 
 export function senseActor(world: World, truth: TruthMap, s: ActorState, tick: number, offline: boolean) {
   const events: StepEvent[] = [];
+  if (s.crashedAt !== undefined) return { s, events }; // a wreck sees nothing
   let k = s.k;
   const radius = s.spec.role === "scout" ? CONFIG.scoutSense : CONFIG.rescuerSense;
   for (const sv of world.survivors) {
@@ -77,6 +90,25 @@ export function actActor(world: World, truth: TruthMap, s0: ActorState, tick: nu
   const events: StepEvent[] = [];
   let completed: ActResult["completed"];
   let s: ActorState = { ...s0, isolatedFor: o.isolated ? s0.isolatedFor + 1 : 0 };
+
+  // A wreck does nothing, except notice a visitor close enough to read it.
+  if (s.crashedAt !== undefined) {
+    if (!s.k.recovered[id]) {
+      const visitor = (Object.entries(s.k.seen) as [ActorId, { pos: Pos; tick: number }][]).find(
+        ([who, v]) => who !== id && who.startsWith("S") && v.tick >= tick - 1 && euclid(v.pos, s.pos) <= RECOVER_RANGE,
+      );
+      if (visitor) s = { ...s, k: { ...s.k, recovered: { ...s.k.recovered, [id]: { tick, by: visitor[0] } } } };
+    }
+    return { s: { ...s, mode: "down" }, events, reason: s.k.recovered[id] ? `Down. Reports recovered by ${NAME[s.k.recovered[id]!.by]}` : "Down. Waiting for a drone to recover my reports" };
+  }
+
+  // The recovering drone announces the hand-over once.
+  for (const [wreck, rec] of Object.entries(s.k.recovered) as [ActorId, { tick: number; by: ActorId }][]) {
+    if (rec.by !== id || s.recoveredFrom?.includes(wreck)) continue;
+    const reports = Object.values(s.k.found).filter((f) => f.by === wreck).length;
+    events.push({ tick, type: "recovered", actor: id, survivor: 0, from: wreck, reports });
+    s = { ...s, recoveredFrom: [...(s.recoveredFrom ?? []), wreck] };
+  }
 
   // Finish an extraction in progress
   if (s.rescuingUntil !== undefined && tick >= s.rescuingUntil) {
@@ -126,7 +158,7 @@ export function actActor(world: World, truth: TruthMap, s0: ActorState, tick: nu
 // Radio links between actors. Actors on the same device always share a link
 // (the device's own local hub); other pairs need range, no scripted cut, and
 // both devices' radios on.
-export type RadioActor = { id: ActorId; device: DeviceId; pos: Pos };
+export type RadioActor = { id: ActorId; device: DeviceId; pos: Pos; down?: boolean };
 
 export const pairKey = (a: string, b: string) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
@@ -136,6 +168,12 @@ export function radioLinks(actors: RadioActor[], cut: Set<string>, off: Set<Devi
     for (let j = i + 1; j < actors.length; j++) {
       const a = actors[i];
       const b = actors[j];
+      // A wreck can only be read by someone right next to it.
+      if (a.down || b.down) {
+        const reachable = a.device === b.device || (!off.has(a.device) && !off.has(b.device));
+        if (reachable && euclid(a.pos, b.pos) <= RECOVER_RANGE) links.push([a.id, b.id]);
+        continue;
+      }
       if (a.device === b.device) {
         links.push([a.id, b.id]);
         continue;
@@ -148,4 +186,4 @@ export function radioLinks(actors: RadioActor[], cut: Set<string>, off: Set<Devi
   return links;
 }
 
-export const toRadio = (spec: ActorSpec, pos: Pos): RadioActor => ({ id: spec.id, device: spec.device, pos });
+export const toRadio = (spec: ActorSpec, pos: Pos, down = false): RadioActor => ({ id: spec.id, device: spec.device, pos, down });

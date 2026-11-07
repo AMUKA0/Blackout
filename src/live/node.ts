@@ -1,8 +1,9 @@
 import { CONFIG } from "../shared/config.ts";
-import { initialState, type ActorState, type Candidate } from "../shared/brain.ts";
-import { DEMO_FAULTS } from "../shared/faults.ts";
+import { initialState, isDown, type ActorState, type Candidate } from "../shared/brain.ts";
 import { emptyKnowledge, merge, type Knowledge } from "../shared/knowledge.ts";
-import { actActor, expireSurvivors, newTruth, revealSurvivors, senseActor, type StepEvent, type TruthMap } from "../shared/step.ts";
+import {
+  actActor, crashActor, expireSurvivors, newTruth, radioLinks, revealSurvivors, senseActor, toRadio, type StepEvent, type TruthMap,
+} from "../shared/step.ts";
 import { generateWorld } from "../shared/world.ts";
 import type { ActorId, DeviceId, World } from "../shared/types.ts";
 import type { BeaconActor, FromHub, ToHub } from "../net/protocol.ts";
@@ -13,6 +14,7 @@ import type { HubClient } from "./client.ts";
 // the hub only delivers between actors in radio range.
 
 export type NodeLog = { tick: number; text: string };
+export type NodeOptions = { onEvent?: (e: StepEvent) => void; onTick?: (t: number) => void };
 
 type GeminiSlot = {
   pending: boolean;
@@ -38,14 +40,11 @@ export class LiveNode {
 
   readonly device: DeviceId;
   private client: HubClient;
-  private opts: { manualRadio: boolean; onEvent?: (e: StepEvent) => void; onTick?: (t: number) => void };
+  private opts: NodeOptions;
 
-  constructor(
-    device: DeviceId,
-    client: HubClient,
-    seed: number,
-    opts: { manualRadio: boolean; onEvent?: (e: StepEvent) => void; onTick?: (t: number) => void } = { manualRadio: false },
-  ) {
+  // The radio is always the device's real connection: Wi-Fi for laptops,
+  // airplane mode for the phone. Nothing here switches it off on a script.
+  constructor(device: DeviceId, client: HubClient, seed: number, opts: NodeOptions = {}) {
     this.device = device;
     this.client = client;
     this.opts = opts;
@@ -66,8 +65,16 @@ export class LiveNode {
     if (this.timer) clearInterval(this.timer);
   }
 
+  // Crash one of this device's drones at the next tick.
+  private pendingCrash = new Set<ActorId>();
+  crash(id: ActorId) {
+    const a = this.actors.find((x) => x.spec.id === id);
+    if (a && a.spec.role === "scout" && a.crashedAt === undefined) this.pendingCrash.add(id);
+  }
+
   private receive(m: FromHub) {
-    if (m.type === "relay") this.inbox.push(m);
+    if (m.type === "crash") this.crash(m.actor);
+    else if (m.type === "relay") this.inbox.push(m);
     else if (m.type === "truth") {
       const t = this.truth.get(m.survivor);
       if (t && t.status !== "rescued") Object.assign(t, { status: "rescued", by: m.by, done: m.tick });
@@ -89,19 +96,19 @@ export class LiveNode {
   step(tick: number) {
     this.lastTick = tick;
 
-    // Scripted radio faults for this device. The phone's radio is the real
-    // airplane-mode toggle, so its scripted entries are ignored.
-    if (!this.opts.manualRadio) {
-      for (const f of DEMO_FAULTS) {
-        if (f.tick === tick && "device" in f && f.device === this.device) {
-          this.client.setRadio(f.kind === "radioOn");
-          this.note(tick, f.kind === "radioOn" ? "Radio back on" : "Radio off, working alone");
-        }
-      }
-    }
-
     revealSurvivors(this.world, this.truth, tick);
     const offline = !this.client.online;
+
+    // 0. Crashes: the drone stops and sends one last mayday this tick.
+    if (this.pendingCrash.size) {
+      this.actors = this.actors.map((s) => {
+        if (!this.pendingCrash.has(s.spec.id)) return s;
+        const c = crashActor(s, tick);
+        this.emit([c.event]);
+        return c.s;
+      });
+      this.pendingCrash.clear();
+    }
 
     // 1. Knowledge that reached us over the air since last tick
     const inbox = this.inbox.splice(0);
@@ -124,9 +131,18 @@ export class LiveNode {
       return r.s;
     });
 
-    // 3. Actors on this device always share (local hub)
-    const snapshot = this.actors.map((s) => s.k);
-    this.actors = this.actors.map((s) => ({ ...s, k: snapshot.reduce((a, b) => merge(a, b), s.k) }));
+    // 3. Actors on this device share over the local hub; a wreck only with a
+    //    drone right next to it.
+    const snapshot = new Map(this.actors.map((s) => [s.spec.id, s.k]));
+    const local = radioLinks(this.actors.map((s) => toRadio(s.spec, s.pos, isDown(s, tick))), new Set(), new Set());
+    this.actors = this.actors.map((s) => {
+      let k = s.k;
+      for (const [x, y] of local) {
+        if (x === s.spec.id) k = merge(k, snapshot.get(y)!);
+        else if (y === s.spec.id) k = merge(k, snapshot.get(x)!);
+      }
+      return { ...s, k };
+    });
 
     // 4. Decide and act. Rescuers may take Gemini's pick among their top 3.
     this.actors = this.actors.map((s) => {
@@ -155,6 +171,7 @@ export class LiveNode {
       reason: this.reasons.get(s.spec.id) ?? "",
       isolatedFor: s.isolatedFor,
       k: s.k,
+      crashedAt: s.crashedAt,
     }));
     if (this.client.send({ type: "beacon", device: this.device, tick, actors: beacon, events: this.pendingEvents })) {
       this.pendingEvents = [];

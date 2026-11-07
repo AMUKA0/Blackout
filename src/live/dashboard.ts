@@ -3,6 +3,7 @@ import { generateWorld } from "../shared/world.ts";
 import type { ActorId, DeviceId, Pos, World } from "../shared/types.ts";
 import type { DeviceStatus, FromHub, ObservedActor } from "../net/protocol.ts";
 import { HqRadio } from "./dashboard-audio.ts";
+import { BRAND_MARK } from "./craft.ts";
 
 // HQ view. It only knows what reaches the hub: actors on a device it has no
 // contact with are drawn as ghosts at their last report, inside a warning zone.
@@ -19,8 +20,9 @@ const DEVICE_NAME: Record<DeviceId, string> = { A: "Laptop A", B: "Laptop B", ph
 const TEAM: Record<DeviceId, string> = { A: "Laptop A team", B: "Laptop B team", phone: "Scout 4" };
 const NS = "http://www.w3.org/2000/svg";
 const $ = (id: string) => document.getElementById(id)!;
+$("brand").innerHTML = BRAND_MARK;
 
-type Contact = "linked" | "alone" | "dark" | "absent";
+type Contact = "linked" | "alone" | "dark" | "absent" | "down";
 // Devices that have reported in this mission. One that never joined is not
 // "dark": HQ never had contact to lose.
 let joined = new Set<DeviceId>();
@@ -73,6 +75,9 @@ function buildMap(w: World) {
     <clipPath id="landclip"><rect width="${size}" height="${size}" rx="14"/></clipPath>
     <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M1 1 9 5 1 9" fill="none" stroke="#ffa62b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1 9 5 1 9" fill="none" stroke="#ff5d71" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>`;
   svg.appendChild(defs);
 
@@ -165,7 +170,26 @@ function makeCraft(id: ActorId): SVGGElement {
     art.appendChild(el("line", { x1: -8, y1: 16, x2: 8, y2: 16, class: "stern" }));
   }
   g.appendChild(art);
-  g.appendChild(el("text", { y: id.startsWith("S") ? 0 : 2 }, id));
+  g.appendChild(el("text", { y: id.startsWith("S") ? 0 : 2, class: "label" }, id));
+  // Crashed: its own silhouette (snapped frame, red cross, smoke).
+  const wreck = el("g", { class: "wreck-art" });
+  for (const [i, [x, y, r]] of [[3, -16, 4], [-2, -23, 5.5], [4, -31, 7]].entries()) {
+    wreck.appendChild(el("circle", { cx: x, cy: y, r, class: "smoke", style: `animation-delay:${i * 0.8}s` }));
+  }
+  wreck.appendChild(el("line", { x1: 0, y1: 0, x2: -10, y2: -10, class: "w-arm" }));
+  wreck.appendChild(el("line", { x1: 0, y1: 0, x2: 7, y2: -3, class: "w-arm" }));
+  wreck.appendChild(el("line", { x1: 0, y1: 0, x2: 10, y2: 10, class: "w-arm" }));
+  wreck.appendChild(el("circle", { cx: -10, cy: -10, r: 6.4, class: "w-rotor" }));
+  wreck.appendChild(el("circle", { cx: 10, cy: 10, r: 6.4, class: "w-rotor" }));
+  wreck.appendChild(el("circle", { r: 9, class: "w-hull" }));
+  wreck.appendChild(el("path", { d: "M-4 -4 4 4M4 -4 -4 4", class: "w-cross" }));
+  g.appendChild(wreck);
+  // Offline: a tag that says so, instead of only a fainter outline.
+  const tag = el("g", { class: "nosig", transform: "translate(0 -27)" });
+  tag.appendChild(el("rect", { x: -31, y: -9, width: 62, height: 17, rx: 8.5 }));
+  tag.appendChild(el("path", { d: "M-24 2 a6 6 0 0 1 8 -6 M-25.5 -1.5 a10 10 0 0 1 12.5 -6.5 M-26 -6 l10 10", class: "nosig-icon" }));
+  tag.appendChild(el("text", { x: 5, y: 3.5 }, "NO SIGNAL"));
+  g.appendChild(tag);
   g.appendChild(el("title", {}, ROLE[id]));
   return g;
 }
@@ -202,7 +226,7 @@ function drawMoving(m: Observe, now: number) {
 
   layers.halos.replaceChildren();
   for (const a of m.actors) {
-    if (!a.online) continue;
+    if (!a.online || a.crashedAt !== undefined) continue;
     const p = at(a.id);
     const r = CONFIG.radioRange * CELL;
     layers.halos.appendChild(el("circle", { cx: p.x, cy: p.y, r, class: "m-halo" }));
@@ -251,7 +275,7 @@ function drawMoving(m: Observe, now: number) {
     }
     g.setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
     (g.querySelector(".art") as SVGGElement).setAttribute("transform", `rotate(${(heading.get(a.id) ?? 0).toFixed(1)})`);
-    const state = !a.online ? "ghost" : linked(a.id) ? "" : "alone";
+    const state = a.crashedAt !== undefined ? "wreck" : !a.online ? "ghost" : linked(a.id) ? "" : "alone";
     const cls = `m-actor ${a.id.startsWith("S") ? "drone" : "boat"} ${state} ${a.mode === "rescuing" ? "rescuing" : ""}`;
     if (g.getAttribute("class") !== cls) g.setAttribute("class", cls);
   }
@@ -341,12 +365,38 @@ function drawMap(m: Observe) {
     if (!t) continue;
     layers.intent.appendChild(el("line", { x1: cx(a.pos), y1: cy(a.pos), x2: cx(t.pos), y2: cy(t.pos), class: "m-intent", "marker-end": "url(#arrow)" }));
   }
+
+  // Wrecks: a red tag until a drone has read them, and the recovery flight.
+  const downs = new Map<ActorId, { pos: Pos; tick: number }>();
+  const recovered = new Map<ActorId, { by: ActorId }>();
+  for (const a of m.actors) {
+    for (const [id, d] of Object.entries(a.k.down ?? {})) if (d) downs.set(id as ActorId, d);
+    for (const [id, r] of Object.entries(a.k.recovered ?? {})) if (r) recovered.set(id as ActorId, r);
+  }
+  for (const [id, d] of downs) {
+    const rec = recovered.get(id);
+    const text = rec ? `${id} reports recovered by ${rec.by}` : `${id} down at ${ref(d.pos)}`;
+    const w = text.length * 6.6 + 22;
+    const x = Math.min(Math.max(cx(d.pos) - w / 2, 0), world.size * CELL - w);
+    const y = Math.min(cy(d.pos) + 24, world.size * CELL - 28);
+    const label = el("g", { class: rec ? "m-wreck-label done" : "m-wreck-label" });
+    label.appendChild(el("rect", { x, y, width: w, height: 24, rx: 12 }));
+    label.appendChild(el("text", { x: x + 11, y: y + 16.5 }, text));
+    layers.labels.appendChild(label);
+    if (!rec) {
+      for (const a of m.actors) {
+        if (a.mode !== "recover" || !a.online) continue;
+        layers.intent.appendChild(el("line", { x1: cx(a.pos), y1: cy(a.pos), x2: cx(d.pos), y2: cy(d.pos), class: "m-recover", "marker-end": "url(#arrow-red)" }));
+      }
+    }
+  }
 }
 
 // ---------- contact strips ----------
 function contactOf(a: ObservedActor | undefined, m: Observe): Contact {
   // The phone runs one actor, so when HQ loses it, it is alone, not a team.
   if (!a) return "absent";
+  if (a.crashedAt !== undefined) return "down";
   if (!a.online && a.device === "phone") return "alone";
   if (!a.online) return "dark";
   return m.links.some(([x, y]) => (x === a.id || y === a.id) && m.actors.find((o) => o.id === (x === a.id ? y : x))?.online) ? "linked" : "alone";
@@ -365,7 +415,7 @@ function recordHistory(m: Observe) {
   }
 }
 
-const STRIP: Record<Contact, string> = { linked: "#8fb0e8", alone: "#f4b6c2", dark: "#ffa62b", absent: "transparent" };
+const STRIP: Record<Contact, string> = { linked: "#8fb0e8", alone: "#f4b6c2", dark: "#ffa62b", absent: "transparent", down: "#ff5d71" };
 
 function stripSvg(h: Contact[], tick: number) {
   const T = CONFIG.missionTicks;
@@ -394,7 +444,16 @@ function drawRows(m: Observe) {
     // Cut-off time comes from the same clock as the band and map label.
     const since = a && !a.online ? darkSince.get(DEVICE_OF[id]) : undefined;
     const secs = since !== undefined ? Math.max(0, missionNow(m.tick) - since) : runLength(h, c);
-    const state = m.tick < 0 ? "" : c === "linked" ? "linked" : c === "absent" ? "not joined" : `${c} ${secs}s`;
+    const state =
+      m.tick < 0 ? ""
+      : c === "linked" ? "linked"
+      : c === "absent" ? "not joined"
+      : c === "down" ? `crashed t${a!.crashedAt}`
+      : `${c} ${secs}s`;
+    // Operator control: crash a drone HQ can still reach.
+    const crashBtn = id.startsWith("S") && a && a.online && c !== "down" && m.tick >= 0 && m.tick < CONFIG.missionTicks - 1
+      ? `<button class="crash" type="button" data-actor="${id}" aria-label="Crash ${ROLE[id]}">Crash</button>`
+      : "";
     const reason = a?.reason ?? "";
     const parts = reason.match(/^(Gemini|Rules \(no Gemini\)|Rules): (.*)$/);
     const body = parts ? `<em class="${parts[1] === "Gemini" ? "gemini" : ""}">${esc(parts[1])}</em>${esc(parts[2])}` : esc(reason || "Waiting for the mission");
@@ -402,7 +461,7 @@ function drawRows(m: Observe) {
     return `<div class="row">
       <div class="who"><span class="tag ${id.startsWith("R") ? "rescuer" : ""} ${c === "linked" ? "" : c}">${id}</span><span><b>${ROLE[id]}</b><small>${DEVICE_NAME[DEVICE_OF[id]]}${a ? ` · ${ref(a.pos)}` : ""}</small></span></div>
       ${stripSvg(h, m.tick)}
-      <div class="state ${c === "linked" ? "" : c}">${state}</div>
+      <div class="state ${c === "linked" ? "" : c}"><span>${state}</span>${crashBtn}</div>
       <div class="reason">${esc(stale)}${body}</div>
     </div>`;
   }).join("");
@@ -432,7 +491,13 @@ function drawEvents(m: Observe) {
       e.type === "found" ? `Found survivor ${e.survivor}`
       : e.type === "rescued" ? `Rescued survivor ${e.survivor}`
       : e.type === "conflict" ? `Yields survivor ${e.survivor} to ${e.winner}`
+      : e.type === "down" ? "Mayday: crashed"
+      : e.type === "recovered"
+        ? e.reports > 0
+          ? `Recovered ${e.reports} survivor ${e.reports === 1 ? "report" : "reports"} from ${e.from}'s wreck, took over its sector`
+          : `Reached ${e.from}'s wreck (no survivor reports on it), took over its sector`
       : `Wasted trip to survivor ${e.survivor}`;
+    if (e.type === "down") pos.set(0, e.pos);
     items.push(`<div class="ev ${e.type} ${e.late ? "late" : ""}"><span class="t">t${e.tick}</span><span class="a">${actor}</span><span class="what">${what}</span><span class="ref">${p ? ref(p) : ""}</span>${
       e.late ? `<span class="late-tag">written t${e.tick}, delivered t${e.arrived}</span>` : ""
     }</div>`);
@@ -449,6 +514,40 @@ function drawOrders(m: Observe) {
 }
 
 // ---------- situation band ----------
+// A crash outranks everything but the end: who went down, who is recovering it.
+function crashBand(m: Observe, set: (cls: string, head: string, sub: string) => void): boolean {
+  const downs = new Map<ActorId, { pos: Pos; tick: number }>();
+  const recovered = new Map<ActorId, { tick: number; by: ActorId }>();
+  for (const a of m.actors) {
+    for (const [id, d] of Object.entries(a.k.down ?? {})) if (d) downs.set(id as ActorId, d);
+    for (const [id, r] of Object.entries(a.k.recovered ?? {})) if (r) recovered.set(id as ActorId, r);
+  }
+  const now = missionNow(m.tick);
+  for (const [id, d] of downs) {
+    const rec = recovered.get(id);
+    if (!rec) {
+      const helper = m.actors.find((a) => a.mode === "recover" && a.online);
+      set(
+        "down",
+        `${ROLE[id]} crashed at ${ref(d.pos)}.`,
+        helper ? `${ROLE[helper.id]} is flying to the wreck to pick up its survivor reports, then it takes over the sector.` : "Its partner heard the mayday and is on its way to the wreck.",
+      );
+      return true;
+    }
+    if (now - rec.tick <= 6) {
+      const reports = Object.values(m.actors.find((a) => a.id === rec.by)?.k.found ?? {}).filter((f) => f.by === id).length;
+      set(
+        "back",
+        `${ROLE[rec.by]} reached ${ROLE[id]}'s wreck.`,
+        reports > 0
+          ? `${reports} survivor ${reports === 1 ? "report" : "reports"} recovered and handed on to the rescue boats. ${ROLE[rec.by]} now covers both sectors.`
+          : `No survivor reports were stranded on it. ${ROLE[rec.by]} now covers both sectors.`,
+      );
+      return true;
+    }
+  }
+  return false;
+}
 let baseline: { condition: string; meanPct: number }[] | null = null;
 fetch("/baseline.json").then((r) => (r.ok ? r.json() : null)).then((j) => (baseline = j?.conditions ?? null)).catch(() => {});
 
@@ -471,6 +570,8 @@ function drawBand(m: Observe) {
         .map((b) => `<div class="result ${b.condition === "mesh" ? "ours" : ""}"><span>${names[b.condition]}</span><span class="track"><span class="fill" style="width:${b.meanPct}%"></span></span><b>${Math.round(b.meanPct)}%</b></div>`)
         .join("");
     }
+  } else if (crashBand(m, set)) {
+    // set by crashBand
   } else if (dark.length > 0) {
     const now = missionNow(m.tick);
     const parts = dark.map((d) => `${TEAM[d.device]} dark ${Math.max(0, now - (darkSince.get(d.device) ?? now))}s`);
@@ -500,21 +601,21 @@ function drawShell(m: Observe) {
   $("found").textContent = String(found.size);
   const g = m.gemini;
   $("gemini").className = `chip ${g.state === "ok" ? "ok" : g.state === "error" ? "bad" : ""}`;
-  $("gemini").innerHTML = `<i></i>${g.state === "ok" ? `Gemini live · ${g.calls} calls` : g.state === "error" ? "Gemini unreachable" : "Gemini idle"}`;
+  $("gemini").innerHTML = `<i></i>${g.state === "ok" ? `Gemini · ${g.calls}` : g.state === "error" ? "Gemini off" : "Gemini"}`;
   const n = m.n8n;
   $("n8n").className = `chip ${n.state === "ok" ? "ok" : n.state === "off" ? "" : "warn"}`;
   $("n8n").innerHTML = `<i></i>${
-    n.state === "off" ? "n8n not set up"
+    n.state === "off" ? "n8n off"
     : n.state === "blocked" ? `n8n cut · ${n.queued} held`
     : n.state === "down" ? `n8n unreachable · ${n.queued} held`
-    : `n8n live · ${n.sent} sent`
+    : `n8n · ${n.sent} sent`
   }`;
-  $("n8n-toggle").textContent = n.state === "blocked" ? "Restore n8n link" : "Cut n8n link";
+  $("n8n-toggle").textContent = n.state === "blocked" ? "Restore n8n" : "Cut n8n";
   // Browsers only play sound after a click, so a silent radio must be obvious.
   if (!radio && !$("radio").hasAttribute("disabled")) {
     const running = m.tick >= 0 && m.tick < CONFIG.missionTicks;
     $("radio").classList.toggle("attention", running);
-    $("radio").textContent = running ? "Radio off: click for voices" : "Turn on radio";
+    $("radio").textContent = running ? "Radio is off" : "Turn on radio";
   }
   $("n8n-toggle").toggleAttribute("disabled", n.state === "off");
 }
@@ -530,7 +631,7 @@ function onStatus(m: Status) {
     if (!d.online && !darkSince.has(d.device) && lastTick >= 0 && joined.has(d.device)) darkSince.set(d.device, missionNow(lastTick));
     if (d.online) darkSince.delete(d.device);
   }
-  $("start").textContent = m.started ? "Restart mission" : "Start mission";
+  $("start").textContent = m.started ? "Restart" : "Start mission";
 }
 
 function onObserve(m: Observe) {
@@ -569,6 +670,14 @@ $("radio").onclick = async () => {
   $("radio").textContent = "Radio on";
 };
 $("n8n-toggle").onclick = () => void fetch("/api/n8n/toggle", { method: "POST" });
+// Crash buttons live in rows that redraw every update, so listen on the list.
+$("rows").addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest("button.crash") as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "Crashing";
+  void fetch("/api/crash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actor: btn.dataset.actor }) });
+});
 $("start").onclick = () => {
   if (lastTick >= 0 && lastTick < CONFIG.missionTicks - 1 && !confirm("Restart the mission from t0?")) return;
   void fetch("/api/start", { method: "POST" });

@@ -3,7 +3,7 @@ import { ACTOR_PHRASES, NUMBERS, callClips, clipUrl } from "../shared/voice.ts";
 import { HubClient } from "./client.ts";
 import { LiveNode } from "./node.ts";
 import { Radio } from "./radio.ts";
-import { CRAFT_CSS, Heading, craftSvg } from "./craft.ts";
+import { BRAND_MARK, CRAFT_CSS, Heading, craftSvg, wreckSvg } from "./craft.ts";
 
 // Scout 4 on the phone. Airplane mode is its real radio switch.
 
@@ -21,7 +21,6 @@ client.onMission = (m) => {
   alone = 0;
   contact = [];
   node = new LiveNode("phone", client, m.seed, {
-    manualRadio: true,
     onEvent: (e) => {
       if (e.type === "found") {
         found++;
@@ -59,10 +58,34 @@ const style = document.createElement("style");
 style.textContent = CRAFT_CSS;
 document.head.appendChild(style);
 $("craft").innerHTML = craftSvg("S4");
+$("brand").innerHTML = BRAND_MARK;
 const heading = new Heading();
+let showingWreck = false;
+
+$("crash").onclick = () => {
+  node?.crash("S4");
+  ($("crash") as HTMLButtonElement).disabled = true;
+  radio?.say(callClips("S4", "mayday"), true);
+};
 
 setInterval(() => {
   const a = node?.actors[0];
+  const crashed = a?.crashedAt !== undefined;
+  // A crashed drone gets its own graphic and screen.
+  if (crashed !== showingWreck) {
+    showingWreck = crashed;
+    $("craft").innerHTML = crashed ? wreckSvg("S4") : craftSvg("S4");
+  }
+  document.body.classList.toggle("down", crashed);
+  ($("crash") as HTMLButtonElement).hidden = crashed || !client.mission || client.tick() >= CONFIG.missionTicks - 1;
+  if (crashed) {
+    const rec = a!.k.recovered.S4;
+    $("word").textContent = "Crashed";
+    $("sub").textContent = rec ? `My reports were recovered by ${rec.by === "S2" ? "Scout 2" : rec.by}.` : "Mayday sent. Waiting for a drone to reach the wreck and recover my reports.";
+    $("doing").textContent = "";
+    $("strip").innerHTML = strip();
+    return;
+  }
   if (a) {
     const deg = heading.update("S4", a.pos);
     ($("craft").querySelector(".craft-turn") as SVGGElement).style.transform = `rotate(${deg}deg)`;

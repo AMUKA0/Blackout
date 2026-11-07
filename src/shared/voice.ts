@@ -28,6 +28,8 @@ export const ACTOR_PHRASES = {
   lost: "Lost contact. Continuing on my own.",
   back: "Back in contact. Sending what I've got.",
   mule: "Carrying news to rescue.",
+  mayday: "Mayday, mayday. Going down.",
+  recovered: "Recovered the wreck's reports. Taking over its sector.",
 } as const;
 export type ActorPhrase = keyof typeof ACTOR_PHRASES;
 export const NEEDS_NUMBER: ActorPhrase[] = ["found", "rescued", "yield", "wasted"];
@@ -41,6 +43,7 @@ export const HQ_LINES = {
   lostPhone: "Scout Four has gone dark.",
   backPhone: "Scout Four is back.",
   rulesOnly: "Gemini unreachable. Actors running on rules.",
+  droneDown: "Drone down. Its partner is going to recover its reports.",
   done: "Mission complete.",
 } as const;
 export type HqLine = keyof typeof HQ_LINES;

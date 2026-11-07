@@ -7,7 +7,7 @@ import type { ActorId, ActorSpec, Pos, World } from "./types.ts";
 // The rule brain. It runs on every device with no network and no model.
 // Gemini later only picks among the candidates this file produces.
 
-export type Mode = "patrol" | "cover" | "rescue" | "rescuing" | "mule" | "frozen";
+export type Mode = "patrol" | "cover" | "recover" | "rescue" | "rescuing" | "mule" | "frozen" | "down";
 
 // Scouts are paired with the scout in the same half of the map (west: S1/S3,
 // east: S2/S4). If a partner goes quiet, its sector has nobody reporting to
@@ -23,7 +23,13 @@ export type ActorState = {
   routeIdx: number;
   isolatedFor: number; // consecutive ticks with no radio neighbour
   mode: Mode;
+  crashedAt?: number; // a drone that went down: it stops, and only a visitor can read it
+  recoveredFrom?: ActorId[]; // wrecks this drone has already announced recovering
 };
+
+export const isDown = (s: ActorState, tick: number) => s.crashedAt !== undefined && tick > s.crashedAt;
+export const NAME: Record<ActorId, string> = { S1: "Scout 1", S2: "Scout 2", S3: "Scout 3", S4: "Scout 4", R1: "Rescue 1", R2: "Rescue 2" };
+export const RECOVER_RANGE = 1.5; // tiles: close enough to read a wreck's reports
 
 export type Candidate = { survivor: number; eta: number; slack: number };
 
@@ -80,10 +86,46 @@ function patrol(world: World, s: ActorState, speed: number, extra?: ActorSpec): 
 // The partner whose sector this scout should also sweep, if it has gone quiet.
 function silentPartner(world: World, s: ActorState, tick: number): ActorSpec | undefined {
   const id = PARTNER[s.spec.id];
-  if (!id || tick < CONFIG.coverAfter) return undefined;
+  if (!id) return undefined;
+  const spec = world.actors.find((a) => a.id === id);
+  if (s.k.down[id]) return spec; // crashed: its sector is ours for good
+  if (tick < CONFIG.coverAfter) return undefined;
   const seen = s.k.seen[id];
   if (seen && tick - seen.tick < CONFIG.coverAfter) return undefined;
-  return world.actors.find((a) => a.id === id);
+  return spec;
+}
+
+// A wreck this drone should fly to: its partner's, or, if that wreck's own
+// partner is unavailable (crashed, never seen, or silent), the nearest
+// working drone goes. Each drone works this out alone from what it knows.
+const SCOUTS: ActorId[] = ["S1", "S2", "S3", "S4"];
+
+function available(s: ActorState, id: ActorId, tick: number): boolean {
+  if (id === s.spec.id) return true;
+  if (s.k.down[id]) return false;
+  const seen = s.k.seen[id];
+  return !!seen && tick - seen.tick < CONFIG.coverAfter;
+}
+
+function wreckToRecover(s: ActorState, tick: number): { id: ActorId; pos: Pos } | undefined {
+  for (const [id, down] of Object.entries(s.k.down) as [ActorId, { pos: Pos }][]) {
+    if (id === s.spec.id || !down || s.k.recovered[id]) continue;
+    if (PARTNER[s.spec.id] === id) return { id, pos: down.pos };
+    const partner = PARTNER[id];
+    if (partner && available(s, partner, tick)) continue; // its partner will go
+    // Fallback: the closest working drone I know of goes (ties: lower id).
+    const dist = (who: ActorId) => cheb(who === s.spec.id ? s.pos : s.k.seen[who]!.pos, down.pos);
+    const candidates = SCOUTS.filter((x) => x !== id && available(s, x, tick));
+    const best = candidates.sort((a, b) => dist(a) - dist(b) || (a < b ? -1 : 1))[0];
+    if (best === s.spec.id) return { id, pos: down.pos };
+  }
+  return undefined;
+}
+
+// A wreck whose reports this drone recovered: that sector is now ours.
+function inheritedSector(world: World, s: ActorState): ActorSpec | undefined {
+  const entry = (Object.entries(s.k.recovered) as [ActorId, { by: ActorId }][]).find(([, r]) => r?.by === s.spec.id);
+  return entry ? world.actors.find((a) => a.id === entry[0]) : undefined;
 }
 
 // Rescue jobs this rescuer could still finish in time, most urgent first.
@@ -132,12 +174,21 @@ function decideScout(world: World, s: ActorState, tick: number): Decision {
       return { next: { ...s, pos, mode: "mule" }, candidates: [], reason: "Carrying news to the nearest rescuer" };
     }
   }
-  const partner = silentPartner(world, s, tick);
+  // Partner crashed: fly to its wreck first and pick up its reports.
+  const wreck = wreckToRecover(s, tick);
+  if (wreck) {
+    let pos = s.pos;
+    for (let i = 0; i < CONFIG.scoutSpeed && cheb(pos, wreck.pos) > 1; i++) pos = stepToward(pos, wreck.pos);
+    const at = `${String.fromCharCode(65 + wreck.pos.x)}${wreck.pos.y + 1}`;
+    return { next: { ...s, pos, mode: "recover" }, candidates: [], reason: `Flying to ${NAME[wreck.id]}'s wreck at ${at} to recover its reports` };
+  }
+  const partner = inheritedSector(world, s) ?? silentPartner(world, s, tick);
   if (partner) {
+    const crashed = !!s.k.down[partner.id];
     return {
       next: patrol(world, s, CONFIG.scoutSpeed, partner),
       candidates: [],
-      reason: `Covering ${partner.id === "S1" ? "Scout 1" : partner.id === "S2" ? "Scout 2" : partner.id === "S3" ? "Scout 3" : "Scout 4"}'s sector while it is out of contact`,
+      reason: crashed ? `Covering ${NAME[partner.id]}'s sector since it crashed` : `Covering ${NAME[partner.id]}'s sector while it is out of contact`,
     };
   }
   return { next: patrol(world, s, CONFIG.scoutSpeed), candidates: [], reason: "Sweeping my sector" };

@@ -21,6 +21,7 @@ export type BeaconActor = {
   reason: string;
   isolatedFor: number;
   k: Knowledge;
+  crashedAt?: number;
 };
 
 export type ToHub =
@@ -37,6 +38,7 @@ export type ObservedActor = BeaconActor & { device: DeviceId; tick: number; onli
 export type FromHub =
   | { type: "pong"; t1: number; server: number }
   | { type: "kicked"; reason: string } // another client took over this device
+  | { type: "crash"; actor: ActorId } // operator crashed this drone from HQ
   | { type: "start"; t0: number; seed: number }
   | { type: "status"; devices: DeviceStatus[]; started: Mission | null }
   | { type: "relay"; from: ActorId; to: ActorId[]; tick: number; k: Knowledge }

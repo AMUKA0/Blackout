@@ -22,9 +22,6 @@ client.onMission = (m) => {
   counts = new Map();
   offlineSince = null;
   node = new LiveNode(device, client, m.seed, {
-    // Real Wi-Fi is the radio switch: no scripted cut-off. Set
-    // SCRIPTED_RADIO=1 to bring back the automatic t28-t72 blackout.
-    manualRadio: process.env.SCRIPTED_RADIO !== "1",
     onEvent: (e) => {
       if (e.type !== "found" && e.type !== "rescued") return;
       const c = counts.get(e.actor) ?? { found: 0, rescued: 0 };
@@ -54,8 +51,12 @@ startDeviceView(device === "A" ? 8081 : 8082, () => ({
     reason: node!.reasons.get(a.spec.id) ?? "",
     found: counts.get(a.spec.id)?.found ?? 0,
     rescued: counts.get(a.spec.id)?.rescued ?? 0,
+    crashedAt: a.crashedAt,
   })),
-}));
+}), (actor) => {
+  node?.crash(actor as never);
+  console.log(`crash ${actor} requested from this laptop's screen`);
+});
 
 let shown = 0;
 setInterval(() => {

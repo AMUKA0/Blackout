@@ -14,14 +14,20 @@ export type Rescued = { tick: number; by: ActorId };
 export type Claim = { eta: number; tick: number; released: boolean };
 export type Seen = { pos: Pos; tick: number };
 
+// A crashed drone's mayday, and who recovered its reports from the wreck.
+export type Down = { pos: Pos; tick: number; by: ActorId };
+export type Recovered = { tick: number; by: ActorId };
+
 export type Knowledge = {
   found: Record<number, Found>;
   rescued: Record<number, Rescued>;
   claims: Record<number, Partial<Record<ActorId, Claim>>>;
   seen: Partial<Record<ActorId, Seen>>;
+  down: Partial<Record<ActorId, Down>>;
+  recovered: Partial<Record<ActorId, Recovered>>;
 };
 
-export const emptyKnowledge = (): Knowledge => ({ found: {}, rescued: {}, claims: {}, seen: {} });
+export const emptyKnowledge = (): Knowledge => ({ found: {}, rescued: {}, claims: {}, seen: {}, down: {}, recovered: {} });
 
 function firstOf<T extends { tick: number; by: string }>(a: T | undefined, b: T | undefined): T | undefined {
   if (!a) return b;
@@ -64,6 +70,11 @@ export function merge(a: Knowledge, b: Knowledge): Knowledge {
     out.claims[+k] = merged;
   }
   for (const who of keys(a.seen, b.seen) as ActorId[]) out.seen[who] = newerSeen(a.seen[who], b.seen[who])!;
+  // Grow-only: once down or recovered, always known; earliest report wins.
+  for (const who of keys(a.down ?? {}, b.down ?? {}) as ActorId[]) out.down[who] = firstOf(a.down?.[who], b.down?.[who])!;
+  for (const who of keys(a.recovered ?? {}, b.recovered ?? {}) as ActorId[]) {
+    out.recovered[who] = firstOf(a.recovered?.[who], b.recovered?.[who])!;
+  }
   return out;
 }
 

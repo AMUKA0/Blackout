@@ -1,12 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { DEMO_FAULTS } from "../shared/faults.ts";
+import { SIM_FAULTS } from "../shared/faults.ts";
 import type { Condition } from "../shared/types.ts";
 import { runSim } from "./engine.ts";
 
 // Usage: npm run sim -- <seed> [mesh|central|independent]
 const seed = Number(process.argv[2] ?? 1);
 const condition = (process.argv[3] ?? "mesh") as Condition;
-const r = runSim({ seed, condition, faults: DEMO_FAULTS, record: true });
+const r = runSim({ seed, condition, faults: SIM_FAULTS, record: true });
 
 console.log(`seed ${seed}, ${condition}: rescued ${r.rescued}/${r.total}, expired ${r.expired}, wasted ${r.wasted}, conflicts ${r.conflicts}, converged ${r.converged}`);
 for (const e of r.events) {

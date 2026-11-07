@@ -42,7 +42,7 @@ Then:
 1. Join both laptops and the phone to the **same phone hotspot**, not venue Wi-Fi.
 2. On both laptops, set that network to **Private**, and allow Node through the firewall when Windows asks.
 3. **Laptop A:** run `npm run a`. It prints Laptop A's IP address.
-4. **Laptop B:** run `$env:HUB="<laptop A ip>"; npm run b` in PowerShell. Its Wi-Fi is its radio: switch Wi-Fi off on stage to cut it off, and back on to reconnect. It notices within about 3 seconds either way. (`$env:SCRIPTED_RADIO="1"` brings back the automatic t28 to t72 cut-off.)
+4. **Laptop B:** run `$env:HUB="<laptop A ip>"; npm run b` in PowerShell. Its Wi-Fi is its radio: switch Wi-Fi off on stage to cut it off, and back on to reconnect. It notices within about 3 seconds either way.
 5. **Phone:** open `http://<laptop A ip>:8080/phone` and tap **Start Scout 4**. Set the screen timeout to the maximum. Airplane mode is its radio switch.
 6. **Laptop A:** open `http://localhost:8080/`, click **Turn on radio**, then **Start mission**. The mission lasts 100 seconds.
 

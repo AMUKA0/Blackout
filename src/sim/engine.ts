@@ -1,9 +1,9 @@
 import { CONFIG } from "../shared/config.ts";
-import { initialState, type ActorState, type Mode } from "../shared/brain.ts";
+import { initialState, isDown, type ActorState, type Mode } from "../shared/brain.ts";
 import { euclid } from "../shared/geo.ts";
 import { emptyKnowledge, merge, type Knowledge } from "../shared/knowledge.ts";
 import {
-  actActor, expireSurvivors, newTruth, pairKey, radioLinks, revealSurvivors, senseActor, toRadio, type StepEvent,
+  actActor, crashActor, expireSurvivors, newTruth, pairKey, radioLinks, revealSurvivors, senseActor, toRadio, type StepEvent,
 } from "../shared/step.ts";
 import { generateWorld } from "../shared/world.ts";
 import type { ActorId, Condition, DeviceId, Fault, Pos } from "../shared/types.ts";
@@ -58,7 +58,8 @@ export function applyFault(f: Fault, cut: Set<string>, off: Set<DeviceId>) {
     if (f.kind === "radioOff") off.add(f.device);
     else off.delete(f.device);
   } else if (f.kind === "cut") cut.add(pairKey(f.a, f.b));
-  else cut.delete(pairKey(f.a, f.b));
+  else if (f.kind === "restore") cut.delete(pairKey(f.a, f.b));
+  // "crash" is applied to the actor by the engine, not to the links.
 }
 
 export function runSim(opts: { seed: number; condition: Condition; faults: Fault[]; record?: boolean }): RunResult {
@@ -91,11 +92,19 @@ export function runSim(opts: { seed: number; condition: Condition; faults: Fault
   for (let tick = 0; tick < CONFIG.missionTicks; tick++) {
     for (const f of opts.faults.filter((x) => x.tick === tick)) {
       applyFault(f, cut, off);
+      if (f.kind === "crash") {
+        actors = actors.map((s) => {
+          if (s.spec.id !== f.actor || s.crashedAt !== undefined) return s;
+          const c = crashActor(s, tick);
+          record([c.event]);
+          return c.s;
+        });
+      }
       events.push({ tick, type: "fault", fault: f });
     }
     revealSurvivors(world, truth, tick);
 
-    const links: [string, string][] = radioLinks(actors.map((s) => toRadio(s.spec, s.pos)), cut, off);
+    const links: [string, string][] = radioLinks(actors.map((s) => toRadio(s.spec, s.pos, isDown(s, tick))), cut, off);
     if (condition === "central") {
       for (const a of actors) {
         if (a.spec.device !== "A" && off.has(a.spec.device)) continue;
@@ -166,7 +175,7 @@ export function runSim(opts: { seed: number; condition: Condition; faults: Fault
   }
 
   const statuses = [...truth.values()].map((t) => t.status);
-  const fps = new Set(actors.map((a) => JSON.stringify([Object.keys(a.k.found).sort(), Object.keys(a.k.rescued).sort()])));
+  const fps = new Set(actors.filter((a) => a.crashedAt === undefined).map((a) => JSON.stringify([Object.keys(a.k.found).sort(), Object.keys(a.k.rescued).sort()])));
   return {
     seed: opts.seed,
     condition,
