@@ -266,9 +266,13 @@ function drawMoving(m: Observe, now: number) {
     layers.links.appendChild(el("circle", { cx: a.x + (b.x - a.x) * u, cy: a.y + (b.y - a.y) * u, r: 2.6, class: "m-packet", opacity: (Math.sin(t * Math.PI) * 0.9 + 0.1).toFixed(2) }));
   });
   for (const [x, y] of m.cuts) {
-    if (!online(byId.get(x)) || !online(byId.get(y))) continue;
+    if (hubOffline || !online(byId.get(x)) || !online(byId.get(y))) continue;
     const a = at(x);
     const b = at(y);
+    // Only show a cut where it matters: the pair is in radio range, so this
+    // is a link that would exist but is blocked. Far-apart pairs would just
+    // put a red cross drifting across the map.
+    if (Math.hypot(b.x - a.x, b.y - a.y) > CONFIG.radioRange * CELL) continue;
     layers.links.appendChild(el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, class: "m-cut" }));
     const g = el("g", { class: "m-cut-x", transform: `translate(${((a.x + b.x) / 2).toFixed(1)} ${((a.y + b.y) / 2).toFixed(1)})` });
     g.appendChild(el("circle", { r: 10 }));
