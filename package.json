@@ -10,10 +10,12 @@
     "baseline": "node src/sim/baseline.ts",
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "build:web": "esbuild src/live/phone.ts src/live/dashboard.ts --bundle --format=esm --target=es2022 --outdir=public/js",
+    "build:web": "esbuild src/live/phone.ts src/live/dashboard.ts src/live/device.ts --bundle --format=esm --target=es2022 --outdir=public/js",
     "hub": "npm run build:web && node --env-file-if-exists=.env.local src/net/hub.ts",
     "n8n:deploy": "node --env-file-if-exists=.env.local scripts/n8n-deploy.ts",
-    "laptop": "node src/live/laptop.ts"
+    "laptop": "node src/live/laptop.ts",
+    "a": "npm run build:web && node scripts/run-a.ts",
+    "b": "node src/live/laptop.ts B"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -22,6 +24,8 @@
     "typescript": "^5.9.0"
   },
   "dependencies": {
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
     "@google/genai": "^3.0.0",
     "ws": "^8.22.1"
   }

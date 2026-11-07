@@ -2,31 +2,59 @@
 
 Six rescue actors keep working toward one goal (reach every survivor in time) while their links fail. Built for the Neptune North challenge at GreatUniHack.
 
-## What exists now
+## What's in the repo
 
-- `src/shared/`: the world from a seed, the rule brain, and the knowledge merge. These run on every device.
-- `src/sim/`: a headless simulator running the scripted fault timeline in `src/shared/faults.ts`.
-- `src/net/`: the hub (Laptop A), the device runner (Laptop B), heartbeats, clock sync, and the radio-off switch.
-- `public/`: the phone page (Scout 4) and the HQ device-check dashboard.
+- `src/shared/`: the world (floods and buildings from a seed), the rule brain, and the knowledge merge. These run on every device.
+- `src/sim/`: a headless simulator running the scripted fault timeline in `src/shared/faults.ts`, plus the 50-map baseline.
+- `src/net/`: the hub (Laptop A), Gemini, and the n8n link.
+- `src/live/`: the live actors, the HQ dashboard, the phone page, and the radio.
+- `public/`: pages, fonts, and the pre-rendered ElevenLabs clips.
 
-## Commands
+## One-time setup
 
-Node 24 runs the TypeScript directly. There's no build step.
+1. Install Node 24, then run `npm install` in the repo.
+2. **Laptop A only:** put `ELEVENLABS_API_KEY`, `N8N_URL` and `N8N_API_KEY` in `.env.local`. Never paste them into chat.
+3. **Laptop A only:** sign in to Google (see docs on Vertex: the `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION=global` and `GOOGLE_GENAI_USE_VERTEXAI=true` user variables). Open a new terminal afterwards so it sees them.
+4. Laptop B needs no keys. It reaches Gemini through Laptop A, so it loses Gemini when its radio is off.
+
+## Run it
+
+### Rehearsal on one laptop
+
+Use two terminals on Laptop A:
 
 ```bash
-npm install
-npm test                 # merge laws, determinism, convergence
-npm run sim -- 3 mesh    # one mission, prints events, writes out/run-3-mesh.json
-npm run baseline -- 50   # 3 conditions x 50 seeds, picks demo seeds
+npm run a
 ```
 
-## Running on the real devices
+```bash
+npm run b
+```
 
-1. Join both laptops and the phone to the **same phone hotspot**. Don't use venue Wi-Fi, because it usually blocks devices from talking to each other.
-2. On both laptops, set the hotspot network to **Private** (Settings > Network > the Wi-Fi network > Network profile). When Windows asks, allow Node through the firewall on private networks.
-3. On Laptop A, run `npm run hub` in one terminal. It builds the web pages and prints the phone URL and Laptop B's `HUB` address. Then run `npm run laptop -- A` in a second terminal for S1 and R1.
-4. On Laptop B, run `$env:HUB="<laptop A ip>"; npm run laptop -- B` in PowerShell. Its radio switches off and on by itself at the scripted ticks. Press `r` to toggle it by hand.
-5. On the phone, open `http://<laptop A ip>:8080/phone`, tap **Start**, and set the screen timeout to the maximum. Airplane mode is its radio switch.
-6. Open `http://localhost:8080/` on Laptop A for the HQ dashboard, then press `s` in the hub terminal to start a 100-second mission. The seed is set with `$env:SEED`, and defaults to 3.
+Then:
 
-If the hotspot fails, use Windows Mobile Hotspot on Laptop A instead.
+1. Open `http://localhost:8080/` and click **Turn on radio**.
+2. Open `http://localhost:8080/phone` in a second window, keep it in front, and tap **Start Scout 4**.
+3. Click **Start mission** on the dashboard.
+
+### The real demo on three devices
+
+1. Join both laptops and the phone to the **same phone hotspot**, not venue Wi-Fi.
+2. On both laptops, set that network to **Private**, and allow Node through the firewall when Windows asks.
+3. **Laptop A:** run `npm run a`. It prints Laptop A's IP address.
+4. **Laptop B:** run `$env:HUB="<laptop A ip>"; npm run b` in PowerShell. Its radio cuts out at t28 and comes back at t72 by itself.
+5. **Phone:** open `http://<laptop A ip>:8080/phone` and tap **Start Scout 4**. Set the screen timeout to the maximum. Airplane mode is its radio switch.
+6. **Laptop A:** open `http://localhost:8080/`, click **Turn on radio**, then **Start mission**. The mission lasts 100 seconds.
+
+Each laptop also shows its own craft at `http://localhost:8081/` (Laptop A) and `http://localhost:8082/` (Laptop B). The laptop serves that page itself, so it keeps working while its radio is off. Put Laptop B's view on its screen for the demo.
+
+The seed defaults to 13; set `$env:SEED` before `npm run a` to change it. If you change it, also run `node scripts/plan.ts <seed>` for Argon's standing orders.
+
+## Other commands
+
+```bash
+npm test                 # merge laws, determinism, convergence, n8n outbox
+npm run sim -- 13 mesh   # one headless mission, prints events
+npm run baseline -- 50   # 3 conditions x 50 seeds, refreshes public/baseline.json
+npm run n8n:deploy       # create or update the n8n workflow
+```

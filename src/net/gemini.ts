@@ -8,6 +8,7 @@ import type { ActorId } from "../shared/types.ts";
 
 export const FLASH = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 export const ARGON = process.env.ARGON_MODEL ?? "gemini-4-argon";
+export const FLASH_LITE = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.5-flash-lite";
 
 export type DecideRequest = {
   actor: ActorId;
@@ -17,7 +18,7 @@ export type DecideRequest = {
   candidates: { survivor: number; eta: number; slack: number; pos: { x: number; y: number } }[];
   others: { id: ActorId; pos: { x: number; y: number }; target?: number; ageTicks: number }[];
 };
-export type DecideResponse = { survivor: number; reason: string; ms: number };
+export type DecideResponse = { survivor: number; reason: string; ms: number; model: string };
 
 let ai: GoogleGenAI | null = null;
 export const geminiStatus = { state: "unknown" as "ok" | "error" | "off" | "unknown", lastError: "", calls: 0, failures: 0 };
@@ -61,31 +62,41 @@ export async function decide(req: DecideRequest, timeoutMs = 3000): Promise<Deci
     .filter(Boolean)
     .join("\n");
 
-  const call = c.models.generateContent({
-    model: FLASH,
-    contents: prompt,
-    // Minimal thinking: ~1.5s instead of 2.5-7s, same choices in testing.
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: DECIDE_SCHEMA,
-      maxOutputTokens: 1024,
-      temperature: 0.2,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-    },
-  });
-  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), timeoutMs));
-  try {
-    const r = await Promise.race([call, timeout]);
-    const parsed = JSON.parse(r.text ?? "{}") as { survivor?: number; reason?: string };
-    if (!req.candidates.some((x) => x.survivor === parsed.survivor)) throw new Error(`invalid choice ${parsed.survivor}`);
-    geminiStatus.state = "ok";
-    return { survivor: parsed.survivor!, reason: (parsed.reason ?? "").split(/\s+/).slice(0, 14).join(" "), ms: Date.now() - t0 };
-  } catch (e) {
-    geminiStatus.failures++;
-    geminiStatus.state = "error";
-    geminiStatus.lastError = (e as Error).message.slice(0, 160);
-    throw e;
+  // Flash first; if it is rate limited (429) or slow, Flash-Lite answers in
+  // under a second. Both stay inside one overall deadline.
+  const deadline = t0 + timeoutMs;
+  let lastErr: Error = new Error("no model tried");
+  for (const model of [FLASH, FLASH_LITE]) {
+    const remaining = deadline - Date.now();
+    if (remaining < 400) break;
+    const call = c.models.generateContent({
+      model,
+      contents: prompt,
+      // Minimal thinking: ~1.5s instead of 2.5-7s, same choices in testing.
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: DECIDE_SCHEMA,
+        maxOutputTokens: 1024,
+        temperature: 0.2,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      },
+    });
+    const budget = model === FLASH ? Math.min(remaining, 2000) : remaining;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), budget));
+    try {
+      const r = await Promise.race([call, timeout]);
+      const parsed = JSON.parse(r.text ?? "{}") as { survivor?: number; reason?: string };
+      if (!req.candidates.some((x) => x.survivor === parsed.survivor)) throw new Error(`invalid choice ${parsed.survivor}`);
+      geminiStatus.state = "ok";
+      return { survivor: parsed.survivor!, reason: (parsed.reason ?? "").split(/\s+/).slice(0, 14).join(" "), ms: Date.now() - t0, model };
+    } catch (e) {
+      lastErr = e as Error;
+    }
   }
+  geminiStatus.failures++;
+  geminiStatus.state = "error";
+  geminiStatus.lastError = lastErr.message.slice(0, 160);
+  throw lastErr;
 }
 
 // Three plain sentences for the n8n hospital pre-alert. Falls back to a

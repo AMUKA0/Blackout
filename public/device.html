@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1433">
+<title>Blackout: this laptop</title>
+<style>
+  @font-face { font-family: "Barlow"; font-weight: 500; font-display: swap; src: url(/fonts/barlow-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url(/fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 700; font-display: swap; src: url(/fonts/barlow-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow SC"; font-weight: 700; font-display: swap; src: url(/fonts/barlow-semi-condensed-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow SC"; font-weight: 800; font-display: swap; src: url(/fonts/barlow-semi-condensed-latin-800-normal.woff2) format("woff2"); }
+  :root { --bg: #0a1433; --text: #eef2fb; --text-2: #a8b6d8; --text-3: #7584ad; --link: #8fb0e8; --amber: #ffa62b; --pink: #f4b6c2; --pink-ink: #5e0c26; --hair: rgba(150,178,235,.14); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 500 16px/1.35 "Barlow", system-ui, sans-serif; font-variant-numeric: tabular-nums; display: grid; grid-template-rows: auto auto 1fr; transition: background-color .5s; }
+  body.off { background: #1b1206; }
+  ::selection { background: var(--link); color: var(--bg); }
+  header { display: flex; align-items: baseline; gap: 18px; padding: 18px 28px 6px; }
+  header b { font: 800 26px "Barlow SC", sans-serif; }
+  header span { color: var(--text-2); font-weight: 600; }
+  header .clock { margin-left: auto; font: 700 26px "Barlow SC", sans-serif; color: var(--text); }
+  .band { margin: 8px 0 0; padding: 14px 28px; background: #101f4b; transition: background-color .5s, color .5s; }
+  .band h1 { margin: 0; font: 800 clamp(28px, 3.4vw, 48px)/1.05 "Barlow SC", sans-serif; }
+  .band p { margin: 2px 0 0; font-weight: 600; opacity: .8; }
+  body.off .band { background: var(--amber); color: #2b1600; }
+  .fleet { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 20px; padding: 24px 28px 28px; align-items: center; }
+  .unit { display: grid; justify-items: center; gap: 10px; text-align: center; }
+  .craft { width: min(30vh, 26vw, 320px); aspect-ratio: 1; color: var(--text); --craft-accent: var(--link); --craft-ink: var(--bg); }
+  body.off .craft { color: var(--amber); --craft-accent: #ffd27a; --craft-ink: #2b1600; }
+  .unit h2 { margin: 0; font: 800 28px "Barlow SC", sans-serif; }
+  .unit .doing { color: var(--text-2); font-weight: 600; max-width: 32ch; min-height: 2.7em; }
+  .unit .facts { display: flex; gap: 22px; color: var(--text-3); font-weight: 600; font-size: 14px; }
+  .unit .facts b { display: block; color: var(--text); font: 800 28px "Barlow SC", sans-serif; }
+  .empty { color: var(--text-2); padding: 28px; }
+</style>
+</head>
+<body>
+  <header><b id="title">Blackout</b><span id="sub">this laptop's actors</span><span class="clock" id="clock">t–</span></header>
+  <section class="band"><h1 id="headline">Connecting to the hub</h1><p id="subline">Waiting for the mission to start.</p></section>
+  <main class="fleet" id="fleet"><p class="empty">No actors yet. Start the mission on the HQ dashboard.</p></main>
+  <script type="module" src="/js/device.js"></script>
+</body>
+</html>

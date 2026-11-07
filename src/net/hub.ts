@@ -17,7 +17,7 @@ import { DEAD_AFTER_MS, HEARTBEAT_MS, PORT, tickAt, type DeviceStatus, type From
 // only reaches actors in radio range on devices that are online. Also serves
 // the phone page and the HQ dashboard. Press "s" to start, "q" to quit.
 
-const SEED = Number(process.env.SEED ?? 3);
+const SEED = Number(process.env.SEED ?? 13);
 const DEVICES: DeviceId[] = ["A", "B", "phone"];
 const lastSeen = new Map<DeviceId, { at: number; tick: number }>();
 const sockets = new Map<DeviceId, WebSocket>();
@@ -111,7 +111,14 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(body);
 }
 
-const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mp3": "audio/mpeg", ".json": "application/json" };
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mp3": "audio/mpeg",
+  ".json": "application/json",
+  ".woff2": "font/woff2",
+  ".svg": "image/svg+xml",
+};
 const ROUTES: Record<string, string> = { "/": "public/dashboard.html", "/phone": "public/phone.html" };
 
 function startMission() {
@@ -157,7 +164,8 @@ const http = createServer((req, res) => {
       });
     return;
   }
-  const file = ROUTES[url] ?? (url.startsWith("/js/") || url.startsWith("/audio/") ? `public${url}` : null);
+  const file =
+    ROUTES[url] ?? (["/js/", "/audio/", "/fonts/"].some((p) => url.startsWith(p)) || url === "/baseline.json" ? `public${url}` : null);
   if (!file || file.includes("..") || !existsSync(file)) {
     res.writeHead(404).end();
     return;
@@ -184,7 +192,12 @@ function currentLinks(tick: number) {
   for (const f of DEMO_FAULTS) if (f.tick <= tick && !("device" in f)) applyFault(f, cut, off);
   for (const d of DEVICES) if (!online(d)) off.add(d);
   const actors = [...latest.values()].map((a) => ({ id: a.id, device: a.device, pos: a.pos }));
-  return { links: radioLinks(actors, cut, off), off };
+  // Scripted cuts between actors on devices HQ can still hear.
+  const known = new Map(actors.map((a) => [a.id, a]));
+  const cuts = [...cut]
+    .map((k) => k.split("-") as [ActorId, ActorId])
+    .filter(([a, b]) => known.has(a) && known.has(b) && !off.has(known.get(a)!.device) && !off.has(known.get(b)!.device));
+  return { links: radioLinks(actors, cut, off), off, cuts };
 }
 
 wss.on("connection", (ws) => {
@@ -284,13 +297,19 @@ setInterval(() => {
   // device the hub is still there when none of its actors are in range.
   broadcastAll({ type: "status", devices: st, started });
   const tick = started ? tickAt(Date.now(), started.t0) : -1;
-  const { links } = currentLinks(tick);
+  const { links, cuts } = currentLinks(tick);
   const actors = [...latest.values()].map((a) => ({ ...a, online: online(a.device) }));
   const gemini = { state: geminiStatus.state, calls: geminiStatus.calls, failures: geminiStatus.failures };
   const p = plan ? { commander: plan.commander, intents: plan.intents } : null;
   const n8nState = { state: n8n.state, queued: n8n.queued, sent: n8n.sent };
   n8nTick(tick);
-  dashboards.forEach((d) => send(d, { type: "observe", tick, actors, links, events: recentEvents.slice(-30), gemini, plan: p, n8n: n8nState }));
+  const total = started ? generateWorld(started.seed).survivors.length : 0;
+  // Every device reports expiries it sees, so count each survivor once.
+  const saved = new Set(truth.map((t) => t.survivor));
+  const lost = new Set(missionEvents.filter((e) => e.type === "expired" && !saved.has(e.survivor)).map((e) => e.survivor)).size;
+  dashboards.forEach((d) =>
+    send(d, { type: "observe", tick, actors, links, cuts, events: recentEvents.slice(-40), gemini, plan: p, n8n: n8nState, score: { reached: truth.length, total, lost } }),
+  );
 }, HEARTBEAT_MS);
 
 let lastLine = "";

@@ -50,6 +50,8 @@ export type FromHub =
       gemini: { state: string; calls: number; failures: number };
       plan: { commander: string; intents: Partial<Record<ActorId, string>> } | null;
       n8n: { state: string; queued: number; sent: number };
+      cuts: [ActorId, ActorId][]; // pairs in range whose link is cut by the script
+      score: { reached: number; total: number; lost: number };
     };
 
 export type Sample = { offset: number; rtt: number };

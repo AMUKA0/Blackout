@@ -1,5 +1,5 @@
 import { CONFIG } from "../shared/config.ts";
-import { ACTOR_PHRASES, CALLSIGNS, HQ_LINES, NUMBERS, callClips, clipUrl, type ActorPhrase } from "../shared/voice.ts";
+import { ACTOR_PHRASES, CALLSIGNS, HQ_LINES, NUMBERS, callClips, clipUrl, resultClip, type ActorPhrase } from "../shared/voice.ts";
 import type { ActorId, DeviceId } from "../shared/types.ts";
 import type { FromHub } from "../net/protocol.ts";
 import { Radio } from "./radio.ts";
@@ -19,13 +19,19 @@ export class HqRadio {
   private online = new Map<DeviceId, boolean>();
   private geminiAnnounced = false;
   private lastTick = -1;
+  private finished = false;
 
   constructor(ctx: AudioContext) {
     this.radio = new Radio(ctx);
   }
 
   async preload() {
-    const urls = ["/audio/fx/static.mp3", "/audio/fx/static-long.mp3", ...Object.keys(HQ_LINES).map((l) => clipUrl("HQ", l))];
+    const urls = [
+      "/audio/fx/static.mp3",
+      "/audio/fx/static-long.mp3",
+      ...Object.keys(HQ_LINES).map((l) => clipUrl("HQ", l)),
+      ...Array.from({ length: CONFIG.survivors + 1 }, (_, n) => resultClip(n)),
+    ];
     for (const a of Object.keys(CALLSIGNS) as ActorId[]) {
       urls.push(clipUrl(a, "callsign"), ...Object.keys(ACTOR_PHRASES).map((p) => clipUrl(a, p)), ...NUMBERS.map((_, i) => clipUrl(a, `n${i + 1}`)));
     }
@@ -37,6 +43,7 @@ export class HqRadio {
   }
 
   onStatus(m: Status) {
+    if (this.finished) return;
     for (const d of m.devices) {
       const before = this.online.get(d.device);
       this.online.set(d.device, d.online);
@@ -47,10 +54,38 @@ export class HqRadio {
   }
 
   onObserve(m: Observe) {
+    const last = CONFIG.missionTicks - 1;
+    // A new mission (the clock jumped back, countdown included) reopens the
+    // channel and forgets the last run's calls: same seed, same events.
+    if (this.lastTick >= 0 && m.tick < this.lastTick - 5) {
+      this.radio.reset();
+      this.finished = false;
+      this.geminiAnnounced = false;
+      this.heard.clear();
+      this.lastTick = -1;
+    }
+    // Radio switched on after a mission already ended: stay quiet.
+    if (this.lastTick < 0 && m.tick >= last) {
+      this.finished = true;
+      this.lastTick = m.tick;
+      return;
+    }
     if (m.tick >= 0 && this.lastTick < 0) this.hq("start");
-    if (m.tick >= CONFIG.missionTicks - 1 && this.lastTick < CONFIG.missionTicks - 1) this.hq("done");
+    if (this.finished) {
+      this.lastTick = m.tick;
+      return;
+    }
+    // The closing line ends the demo on time: it cuts in, then the radio is silent.
+    if (m.tick >= last) {
+      this.finished = true;
+      this.lastTick = m.tick;
+      this.radio.finish([resultClip(Math.min(m.score.reached, CONFIG.survivors))]);
+      return;
+    }
+    // In the last few seconds, don't start calls the closing line would cut off.
+    const quietEnd = m.tick >= last - 3;
     this.lastTick = m.tick;
-    if (m.gemini.state === "error" && !this.geminiAnnounced) {
+    if (m.gemini.state === "error" && !this.geminiAnnounced && !quietEnd) {
       this.geminiAnnounced = true;
       this.hq("rulesOnly");
     }
@@ -65,14 +100,20 @@ export class HqRadio {
       this.primed = true; // a reloaded page shouldn't replay history
       return;
     }
+    if (quietEnd) return;
     // Late reports first get a short summary, then the most important few.
     const late = fresh.filter((e) => e.late);
     const live = fresh.filter((e) => !e.late);
     const important = (e: (typeof fresh)[number]) => (e.type === "rescued" ? 0 : e.type === "conflict" ? 1 : e.type === "wasted" ? 2 : 3);
-    for (const e of [...late.sort((a, b) => important(a) - important(b)).slice(0, 3), ...live]) {
+    // The backlog burst may wait longer (it follows the "back in range" line);
+    // the closing line still cuts it off at the end of the mission.
+    for (const e of late.sort((a, b) => important(a) - important(b)).slice(0, 3)) {
       const phrase = PHRASE[e.type];
-      if (!phrase || !("actor" in e)) continue;
-      this.radio.say(callClips(e.actor, phrase, e.survivor));
+      if (phrase && "actor" in e) this.radio.say(callClips(e.actor, phrase, e.survivor), false, 15000);
+    }
+    for (const e of live) {
+      const phrase = PHRASE[e.type];
+      if (phrase && "actor" in e) this.radio.say(callClips(e.actor, phrase, e.survivor));
     }
   }
 }

@@ -3,55 +3,265 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1433">
 <title>Blackout HQ</title>
+<link rel="preload" href="/fonts/barlow-semi-condensed-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-  :root { --navy: #0b1f5c; --link: #8fb0e8; --pink: #f4b6c2; --cut: #c4163c; --paper: #f5f2ec; --water: #cfdcf3; --land: #ffffff; --save: #2f8f5b; }
+  @font-face { font-family: "Barlow"; font-weight: 400; font-display: swap; src: url(/fonts/barlow-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 500; font-display: swap; src: url(/fonts/barlow-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url(/fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 700; font-display: swap; src: url(/fonts/barlow-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow SC"; font-weight: 600; font-display: swap; src: url(/fonts/barlow-semi-condensed-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow SC"; font-weight: 700; font-display: swap; src: url(/fonts/barlow-semi-condensed-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow SC"; font-weight: 800; font-display: swap; src: url(/fonts/barlow-semi-condensed-latin-800-normal.woff2) format("woff2"); }
+
+  :root {
+    --bg: #0a1433;
+    --bg-2: #0d1a40;
+    --panel: #101f4b;
+    --hair: rgba(150, 178, 235, .14);
+    --hair-2: rgba(150, 178, 235, .26);
+    --text: #eef2fb;
+    --text-2: #a8b6d8;
+    --text-3: #7584ad;
+    --link: #8fb0e8;
+    --link-hot: #d4e1ff;
+    --water: #142f6e;
+    --yellow: #ffd24a;
+    --amber: #ffa62b;
+    --amber-deep: #3b2307;
+    --red: #ff5d71;
+    --pink: #f4b6c2;
+    --pink-ink: #5e0c26;
+    --green: #4fd39a;
+    --font: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --sign: "Barlow SC", "Barlow", "Segoe UI", system-ui, sans-serif;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--paper); color: var(--navy); font-family: system-ui, sans-serif; padding: 24px; }
-  header { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; margin-bottom: 16px; }
-  h1 { margin: 0; font-size: 1.8rem; }
-  #tick { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .layout { display: grid; grid-template-columns: minmax(0, 620px) minmax(0, 1fr); gap: 24px; }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
-  svg { width: 100%; height: auto; border-radius: 12px; display: block; }
-  .land { fill: var(--land); } .water { fill: var(--water); }
-  .link { stroke: var(--link); stroke-width: 4; stroke-linecap: round; }
-  .actor { fill: var(--navy); stroke: #dfe7f7; stroke-width: 5; }
-  .actor.alone { fill: var(--navy); stroke: var(--pink); stroke-width: 7; }
-  .actor.ghost { fill: none; stroke: var(--navy); stroke-dasharray: 4 4; stroke-width: 3; opacity: .45; }
-  .aid { fill: #fff; font-size: 12px; font-weight: 700; text-anchor: middle; }
-  .aid.ghost-text { fill: var(--navy); opacity: .5; }
-  .survivor { fill: var(--cut); } .saved { fill: var(--save); }
-  .sid { fill: #fff; font-size: 10px; font-weight: 700; text-anchor: middle; }
-  #devices { display: grid; gap: 8px; margin-bottom: 16px; }
-  .card { display: flex; justify-content: space-between; gap: 8px; background: #fff; border: 2px solid var(--link); border-radius: 10px; padding: 8px 12px; }
-  .card.down { background: var(--pink); border-color: var(--cut); }
-  h2 { font-size: 1rem; margin: 16px 0 6px; }
-  ul { list-style: none; padding: 0; margin: 0; font-size: .92rem; }
-  li { padding: 3px 0; } li.stale { opacity: .55; } li.late { color: var(--cut); font-weight: 600; }
-  .badge { font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #fff; border: 2px solid var(--link); }
-  .badge.ok { border-color: var(--save); color: var(--save); } .badge.error { border-color: var(--cut); color: var(--cut); }
-  #radio { margin-left: auto; font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; border: 0; background: var(--navy); color: #fff; cursor: pointer; }
-  #radio[disabled] { opacity: .6; cursor: default; }
-  .ghost { font: inherit; font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 2px solid var(--navy); background: transparent; color: var(--navy); cursor: pointer; }
-  .badge.blocked, .badge.down { border-color: var(--cut); color: var(--cut); }
-  .commander { margin: 0 0 6px; font-style: italic; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); font: 500 15px/1.35 var(--font);
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden;
+  }
+  ::selection { background: var(--link); color: var(--bg); }
+  :focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; border-radius: 6px; }
+  button { font: inherit; cursor: pointer; }
+
+  /* Top bar */
+  .bar { display: flex; align-items: center; gap: 26px; padding: 12px 24px 10px; }
+  .mark { display: flex; align-items: center; gap: 10px; font: 800 24px var(--sign); letter-spacing: .01em; }
+  .mark svg { width: 24px; height: 24px; }
+  .clock { display: flex; align-items: baseline; gap: 5px; font: 700 26px var(--sign); }
+  .clock small { font: 600 14px var(--font); color: var(--text-3); }
+  .tally { display: flex; gap: 18px; color: var(--text-2); font-weight: 600; font-size: 14px; }
+  .tally b { font: 700 21px var(--sign); color: var(--text); margin-right: 5px; }
+  .tally .lost b { color: var(--red); }
+  .tally .reached b { color: var(--green); }
+  .spacer { flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+  .chip.ok i { background: var(--green); }
+  .chip.warn i { background: var(--amber); }
+  .chip.bad i { background: var(--red); }
+  .btn { border: 0; border-radius: 999px; padding: 8px 15px; font-weight: 700; font-size: 13.5px; transition: background-color .2s, color .2s; }
+  .btn.ghost { background: rgba(150, 178, 235, .12); color: var(--text); }
+  .btn.ghost:hover { background: rgba(150, 178, 235, .2); }
+  .btn.solid { background: var(--text); color: var(--bg); }
+  .btn.solid:hover { background: #fff; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn.solid.attention { background: var(--amber); color: #2b1600; }
+
+  /* Situation band */
+  .band {
+    margin: 2px 0 0; padding: 14px 24px; min-height: 80px;
+    display: flex; align-items: center; gap: 24px; background: var(--panel); color: var(--text);
+    transition: background-color .6s cubic-bezier(.2, .8, .2, 1), color .6s;
+  }
+  .band .msg { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .band h1 { margin: 0; font-family: var(--sign); font-weight: 800; font-size: clamp(28px, 3vw, 44px); line-height: 1.04; letter-spacing: -.005em; text-wrap: balance; }
+  .band p { margin: 0; font-size: 14.5px; font-weight: 600; opacity: .78; }
+  .band.cut { background: var(--yellow); color: #2a2000; }
+  .band.dark { background: var(--amber); color: #2b1600; }
+  .band.alone { background: var(--pink); color: var(--pink-ink); }
+  .band.back { background: var(--link); color: #0a1433; }
+  .band.done { background: var(--text); color: var(--bg); }
+  .results { display: none; gap: 7px; width: min(470px, 42vw); }
+  .band.done .results { display: grid; }
+  .result { display: grid; grid-template-columns: 118px 1fr 44px; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; }
+  .result .track { height: 10px; border-radius: 99px; background: rgba(10, 20, 51, .12); overflow: hidden; }
+  .result .fill { display: block; height: 100%; border-radius: 99px; background: rgba(10, 20, 51, .35); }
+  .result.ours .fill { background: var(--bg); }
+  .result b { text-align: right; font: 800 17px var(--sign); }
+
+  /* Work area */
+  main { display: grid; grid-template-columns: auto minmax(380px, 1fr); gap: 22px; padding: 14px 24px 18px; min-height: 0; }
+  .map-wrap { height: 100%; aspect-ratio: 1; min-height: 0; position: relative; }
+  #map { width: 100%; height: 100%; display: block; overflow: visible; }
+  .side { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px; min-height: 0; }
+  h2 { margin: 0; font-family: var(--sign); font-weight: 700; font-size: 19px; letter-spacing: .01em; color: var(--text); }
+
+  .contact-head { display: grid; grid-template-columns: 148px 1fr 70px; gap: 14px; align-items: end; margin-bottom: 4px; }
+  .axis { position: relative; height: 14px; font-size: 11px; font-weight: 600; color: var(--text-3); }
+  .axis span { position: absolute; transform: translateX(-50%); }
+  .axis span:first-child { transform: none; } .axis span:last-child { transform: translateX(-100%); }
+  .row { display: grid; grid-template-columns: 148px 1fr 70px; column-gap: 14px; align-items: center; padding: 6px 0; }
+  .row + .row { border-top: 1px solid var(--hair); }
+  .who { grid-row: span 2; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .tag { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--text); color: var(--bg); font-weight: 800; font-size: 12px; }
+  .tag.rescuer { border-radius: 9px; }
+  .tag.alone { background: var(--pink); color: var(--pink-ink); }
+  .tag.dark { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1.5px var(--text-3); }
+  .who b { display: block; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .who small { display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .strip { display: block; width: 100%; height: 10px; }
+  .state { text-align: right; font-size: 13px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+  .state.dark { color: var(--amber); } .state.alone { color: var(--pink); }
+  .reason { grid-column: 2 / 4; margin-top: 3px; font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .reason em { font-style: normal; font-weight: 700; color: var(--text-2); margin-right: 5px; }
+  .reason em.gemini { color: var(--link); }
+  .legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .legend i { display: inline-block; width: 16px; height: 6px; border-radius: 9px; margin-right: 6px; vertical-align: 2px; }
+
+  .log { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tab { border: 0; background: transparent; color: var(--text-3); font-family: var(--sign); font-weight: 700; font-size: 19px; padding: 4px 13px; border-radius: 999px; transition: background-color .2s, color .2s; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: rgba(150, 178, 235, .14); color: var(--text); }
+  .tab .count { font: 600 13px var(--font); margin-left: 6px; color: var(--text-3); }
+  .panel { overflow: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--hair-2) transparent; padding-right: 4px; }
+  .panel[hidden] { display: none; }
+  .events { list-style: none; margin: 0; padding: 0; }
+  .ev { display: grid; grid-template-columns: 38px 28px 1fr auto; gap: 10px; align-items: baseline; padding: 5px 0; font-size: 14px; }
+  .ev + .ev { border-top: 1px solid var(--hair); }
+  .ev .t { color: var(--text-3); font-weight: 600; font-size: 13px; }
+  .ev .a { font-weight: 800; font-size: 13px; }
+  .ev .what { color: var(--text-2); }
+  .ev.rescued .what { color: var(--green); }
+  .ev.conflict .what, .ev.wasted .what { color: var(--yellow); }
+  .ev .ref { font: 700 12.5px var(--sign); color: var(--text-3); }
+  .ev.late .what { color: var(--amber); }
+  .ev .late-tag { grid-column: 3 / 5; font-size: 12px; color: var(--text-3); margin-top: -1px; }
+  .backlog { margin: 4px 0 6px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 166, 43, .14); color: var(--amber); font-weight: 700; font-size: 13.5px; }
+  .empty { color: var(--text-3); font-size: 14px; padding: 6px 0; max-width: 46ch; }
+  .orders .commander { margin: 0 0 12px; font-size: 14.5px; font-weight: 600; color: var(--text); max-width: 72ch; }
+  .orders dl { margin: 0; display: grid; grid-template-columns: 30px 1fr; gap: 8px 12px; font-size: 13.5px; }
+  .orders dt { font-weight: 800; } .orders dd { margin: 0; color: var(--text-2); }
+  .orders .src { margin-top: 12px; font-size: 12px; color: var(--text-3); }
+
+  /* Map */
+  .m-land { fill: var(--bg-2); }
+  .m-dot { fill: rgba(150, 178, 235, .22); }
+  .m-water { fill: var(--water); }
+  .m-water-edge { fill: none; stroke: rgba(143, 176, 232, .35); stroke-width: 1.2; }
+  .m-axis { fill: var(--text-3); font: 600 10.5px var(--font); text-anchor: middle; }
+  .m-base { fill: none; stroke: rgba(150, 178, 235, .3); stroke-width: 1.2; stroke-dasharray: 2 4; }
+  .m-base-label { fill: var(--text-3); font: 700 10px var(--font); letter-spacing: .08em; }
+  .m-halo { fill: url(#halo); }
+  .m-range { fill: none; stroke: rgba(143, 176, 232, .16); stroke-width: 1; }
+  .m-zone-outer { fill: var(--amber); opacity: .14; }
+  .m-zone-inner { fill: var(--amber); opacity: .16; }
+  .m-zone-edge { fill: var(--amber); opacity: .9; }
+  .m-zone-outer.alone, .m-zone-inner.alone, .m-zone-edge.alone { fill: var(--pink); }
+
+  /* Buildings: rooftops from above; fade when a drone is over them */
+  .m-bldg { transition: opacity .35s cubic-bezier(.2, .8, .2, 1); }
+  .m-bldg .side { fill: #050c24; }
+  .m-bldg .roof { fill: #1c2f68; stroke: rgba(150, 178, 235, .34); stroke-width: 1.2; }
+  .m-bldg .parapet { fill: none; stroke: rgba(150, 178, 235, .16); stroke-width: 1; }
+  .m-bldg .unit { fill: rgba(150, 178, 235, .2); }
+  .m-bldg.entered { opacity: .22; }
+
+  /* Craft: drones (scouts) and rescue boats (rescuers), seen from above */
+  .m-actor .rotor { fill: rgba(10, 20, 51, .55); stroke: var(--link); stroke-width: 1.6; }
+  .m-actor .hub { fill: var(--link); }
+  .m-actor .arm { stroke: var(--text); stroke-width: 3; stroke-linecap: round; }
+  .m-actor .hull { fill: var(--text); }
+  .m-actor .nose { fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .m-actor .gunwale { fill: none; stroke: var(--link); stroke-width: 1.4; transform: scale(.78); }
+  .m-actor .stern { stroke: var(--link); stroke-width: 1.6; stroke-linecap: round; }
+  .m-actor.alone .hull, .m-actor.alone .arm { fill: var(--pink); stroke: var(--pink); }
+  .m-actor.alone .nose { stroke: var(--pink); }
+  .m-actor.alone .rotor { stroke: var(--pink); }
+  .m-actor.ghost .hull { fill: var(--bg-2); stroke: var(--text-2); stroke-width: 1.5; stroke-dasharray: 3 2.5; }
+  .m-actor.ghost .arm, .m-actor.ghost .nose { stroke: var(--text-3); }
+  .m-actor.ghost .rotor { stroke: var(--text-3); stroke-dasharray: 2 2; fill: none; }
+  .m-actor.ghost .gunwale, .m-actor.ghost .stern, .m-actor.ghost .hub { opacity: 0; }
+  .m-water { fill: var(--water); }
+  .m-zone-label rect { fill: var(--amber); } .m-zone-label text { fill: #2b1600; font: 700 12.5px var(--font); }
+  .m-zone-label.alone rect { fill: var(--pink); } .m-zone-label.alone text { fill: var(--pink-ink); }
+  .m-link { stroke: var(--link); stroke-width: 2.4; stroke-linecap: round; opacity: .75; }
+  .m-packet { fill: var(--link-hot); }
+  .m-cut { stroke: var(--red); stroke-width: 1.6; stroke-dasharray: 4 6; opacity: .7; }
+  .m-cut-x circle { fill: var(--bg-2); stroke: var(--red); stroke-width: 1.8; }
+  .m-cut-x path { stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+  .m-intent { stroke: var(--amber); stroke-width: 1.6; stroke-dasharray: 1 5; stroke-linecap: round; fill: none; opacity: .85; }
+  .m-surv .clock-bg { fill: none; stroke: rgba(255, 93, 113, .22); stroke-width: 3; }
+  .m-surv .clock-fg { fill: none; stroke: var(--red); stroke-width: 3; stroke-linecap: round; }
+  .m-surv .core { fill: var(--red); }
+  .m-surv text { fill: #fff; font: 800 10.5px var(--font); text-anchor: middle; }
+  .m-surv.saved .core { fill: none; stroke: var(--green); stroke-width: 2; }
+  .m-surv.saved path { stroke: var(--green); stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .m-surv.saved { opacity: .7; }
+  .m-actor text { fill: var(--bg); font: 800 10.5px var(--font); text-anchor: middle; dominant-baseline: central; }
+  .m-actor.alone text { fill: var(--pink-ink); }
+  .m-actor.ghost text { fill: var(--text-2); }
+  .m-actor .pulse { fill: none; stroke: var(--green); stroke-width: 2; opacity: 0; }
+  .m-actor.rescuing .pulse { animation: pulse 1.5s cubic-bezier(.2, .8, .2, 1) infinite; }
+  @keyframes pulse { from { r: 15px; opacity: .9; } to { r: 32px; opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .m-actor.rescuing .pulse { animation: none; opacity: .7; r: 22px; } .band { transition: none; } }
+
+  @media (max-width: 1100px) {
+    body { overflow: auto; grid-template-rows: auto auto auto; }
+    main { grid-template-columns: 1fr; }
+    .map-wrap { height: auto; width: 100%; }
+    .tally { display: none; }
+  }
 </style>
 </head>
 <body>
-  <header><h1>Blackout HQ</h1><span id="tick"></span><span id="mission"></span><span id="gemini" class="badge">Gemini idle</span><span id="n8n" class="badge">n8n</span><button id="n8n-toggle" class="ghost">Cut n8n link</button><button id="radio">Turn on radio</button></header>
-  <div class="layout">
-    <svg id="map" role="img" aria-label="Map of actors, links and survivors"></svg>
-    <section>
-      <div id="devices"></div>
-      <h2>What each actor is doing</h2>
-      <ul id="reasons"></ul>
-      <h2>Events</h2>
-      <ul id="events"></ul>
-      <h2>Standing orders (gemini-4-argon, written before the mission)</h2>
-      <ul id="orders"></ul>
+  <header class="bar">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke-linecap="round"><path d="M6.2 15.4 10.8 8.6M7.6 17.5h3.6" stroke="#8fb0e8" stroke-width="1.8"/><path d="m14.6 15.6 2 2m0-2-2 2" stroke="#ff5d71" stroke-width="1.8"/><circle cx="5" cy="17.5" r="2.6" fill="#eef2fb"/><circle cx="12" cy="6.5" r="2.6" fill="#eef2fb"/><circle cx="19.2" cy="17.5" r="2.6" fill="#f4b6c2"/></g></svg>
+      Blackout
+    </div>
+    <div class="clock" aria-label="Mission tick"><span id="tick">t–</span><small>/ 100</small></div>
+    <div class="tally"><span><b id="found">0</b>found</span><span class="reached"><b id="reached">0</b>reached</span><span class="lost"><b id="lost">0</b>lost</span></div>
+    <div class="spacer"></div>
+    <span class="chip" id="gemini"><i></i>Gemini idle</span>
+    <span class="chip" id="n8n"><i></i>n8n</span>
+    <button class="btn ghost" id="n8n-toggle" type="button">Cut n8n link</button>
+    <button class="btn ghost" id="start" type="button">Start mission</button>
+    <button class="btn solid" id="radio" type="button">Turn on radio</button>
+  </header>
+
+  <section class="band" id="band" aria-live="polite">
+    <div class="msg"><h1 id="headline">Ready. Six actors, one goal.</h1><p id="subline">Reach every survivor before their deadline, whatever happens to the network.</p></div>
+    <div class="results" id="results" aria-label="Survivors reached over 50 maps with the same failures"></div>
+  </section>
+
+  <main>
+    <div class="map-wrap"><svg id="map" role="img" aria-label="Map of actors, radio links and survivors as HQ knows them"></svg></div>
+    <section class="side">
+      <div>
+        <div class="contact-head">
+          <h2>Contact</h2>
+          <div class="axis" aria-hidden="true"><span style="left:0">t0</span><span style="left:25%">25</span><span style="left:50%">50</span><span style="left:75%">75</span><span style="left:100%">100</span></div>
+          <div></div>
+        </div>
+        <div id="rows"></div>
+        <div class="legend"><span><i style="background:var(--link)"></i>linked</span><span><i style="background:var(--pink)"></i>alone</span><span><i style="background:var(--amber)"></i>no contact with HQ</span></div>
+      </div>
+      <div class="log">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="tab-log" aria-selected="true" aria-controls="panel-log" type="button">Radio log<span class="count" id="log-count"></span></button>
+          <button class="tab" role="tab" id="tab-orders" aria-selected="false" aria-controls="panel-orders" type="button">Standing orders</button>
+        </div>
+        <div class="panel" id="panel-log" role="tabpanel" aria-labelledby="tab-log"><div id="events"></div></div>
+        <div class="panel orders" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" hidden></div>
+      </div>
     </section>
-  </div>
+  </main>
   <script type="module" src="/js/dashboard.js"></script>
 </body>
 </html>

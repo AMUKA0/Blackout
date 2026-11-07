@@ -43,8 +43,32 @@ export function generateWorld(seed: number): World {
     }
   }
 
-  // Survivors only on land a rescuer can reach from base.
-  const reach = distanceMap(S, water, base);
+  // Buildings: own random stream so the flood layout stays the same per seed.
+  // Each block keeps a one-tile street around it and stays clear of base.
+  const brng = mulberry32(seed ^ 0x5bd1e995);
+  const buildings = new Array<boolean>(S * S).fill(false);
+  for (let b = 0; b < CONFIG.buildings; b++) {
+    const w = randInt(brng, 1, 2);
+    const h = randInt(brng, 1, 2);
+    const x0 = randInt(brng, 0, S - w);
+    const y0 = randInt(brng, 0, S - h);
+    let ok = true;
+    for (let y = y0 - 1; y <= y0 + h && ok; y++) {
+      for (let x = x0 - 1; x <= x0 + w && ok; x++) {
+        if (x < 0 || y < 0 || x >= S || y >= S) continue;
+        const inside = x >= x0 && x < x0 + w && y >= y0 && y < y0 + h;
+        if (buildings[y * S + x]) ok = false;
+        if (inside && water[y * S + x]) ok = false;
+        if (inside && Math.abs(x - base.x - 0.5) <= 2.5 && Math.abs(y - base.y - 0.5) <= 2.5) ok = false;
+      }
+    }
+    if (!ok) continue;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) buildings[y * S + x] = true;
+  }
+  const solid = water.map((wet, i) => wet || buildings[i]);
+
+  // Survivors only on open ground a rescuer can reach from base.
+  const reach = distanceMap(S, solid, base);
   const land: Pos[] = [];
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
@@ -77,7 +101,7 @@ export function generateWorld(seed: number): World {
     start: { x: base.x + offsets[i].x, y: base.y + offsets[i].y },
   }));
 
-  return { seed, size: S, water, base, survivors, actors };
+  return { seed, size: S, water, buildings, solid, base, survivors, actors };
 }
 
 // Lawnmower loop through an area, row spacing set by sensing radius.

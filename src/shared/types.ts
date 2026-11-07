@@ -24,6 +24,8 @@ export type World = {
   seed: number;
   size: number;
   water: boolean[]; // index y * size + x; rescuers cannot enter
+  buildings: boolean[]; // rescuers route around them; scouts fly over
+  solid: boolean[]; // water or building: what ground routes avoid
   base: Pos;
   survivors: Survivor[];
   actors: ActorSpec[];

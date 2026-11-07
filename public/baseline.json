@@ -1,0 +1,23 @@
+{
+  "seeds": 50,
+  "conditions": [
+    {
+      "condition": "central",
+      "meanPct": 73.3,
+      "minPct": 50,
+      "maxPct": 100
+    },
+    {
+      "condition": "independent",
+      "meanPct": 57.5,
+      "minPct": 41.7,
+      "maxPct": 83.3
+    },
+    {
+      "condition": "mesh",
+      "meanPct": 92.3,
+      "minPct": 75,
+      "maxPct": 100
+    }
+  ]
+}

@@ -2,7 +2,8 @@
 // that already exist, so re-running only fills gaps. Run on Laptop A:
 //   node --env-file=.env.local scripts/voices.ts
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { ACTOR_PHRASES, CALLSIGNS, HQ_LINES, NUMBERS, VOICES, type Speaker } from "../src/shared/voice.ts";
+import { ACTOR_PHRASES, CALLSIGNS, HQ_LINES, NUMBERS, VOICES, resultText, type Speaker } from "../src/shared/voice.ts";
+import { CONFIG } from "../src/shared/config.ts";
 import type { ActorId } from "../src/shared/types.ts";
 
 const key = (process.env.ELEVENLABS_API_KEY ?? "").trim();
@@ -17,6 +18,7 @@ for (const actor of Object.keys(CALLSIGNS) as ActorId[]) {
   NUMBERS.forEach((n, i) => jobs.push({ speaker: actor, clip: `n${i + 1}`, text: `${n[0].toUpperCase()}${n.slice(1)}.` }));
 }
 for (const [clip, text] of Object.entries(HQ_LINES)) jobs.push({ speaker: "HQ", clip, text });
+for (let n = 0; n <= CONFIG.survivors; n++) jobs.push({ speaker: "HQ", clip: `result-${n}`, text: resultText(n, CONFIG.survivors) });
 
 async function tts(job: Job): Promise<Buffer> {
   let last = "";

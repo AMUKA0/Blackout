@@ -50,6 +50,11 @@ const demoSeeds = results.mesh
 console.log("Demo seed candidates (conflict resolves within 8 ticks of reconnect):");
 console.table(demoSeeds);
 
+// The dashboard's results chart reads this.
+writeFileSync(
+  "public/baseline.json",
+  JSON.stringify({ seeds: SEEDS, conditions: summary.map((s) => ({ condition: s.condition, meanPct: s.meanPct, minPct: s.minPct, maxPct: s.maxPct })) }, null, 2),
+);
 mkdirSync("out", { recursive: true });
 writeFileSync("out/baseline.json", JSON.stringify({ seeds: SEEDS, summary, demoSeeds, perSeed: conditions.map((c) => ({ condition: c, rescued: results[c].map((r) => r.rescued) })) }, null, 2));
 console.log("wrote out/baseline.json");

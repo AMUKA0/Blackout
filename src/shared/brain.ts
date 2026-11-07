@@ -7,7 +7,12 @@ import type { ActorId, ActorSpec, Pos, World } from "./types.ts";
 // The rule brain. It runs on every device with no network and no model.
 // Gemini later only picks among the candidates this file produces.
 
-export type Mode = "patrol" | "rescue" | "rescuing" | "mule" | "frozen";
+export type Mode = "patrol" | "cover" | "rescue" | "rescuing" | "mule" | "frozen";
+
+// Scouts are paired with the scout in the same half of the map (west: S1/S3,
+// east: S2/S4). If a partner goes quiet, its sector has nobody reporting to
+// the rescuers we can still reach, so we sweep it too.
+const PARTNER: Partial<Record<ActorId, ActorId>> = { S1: "S3", S3: "S1", S2: "S4", S4: "S2" };
 
 export type ActorState = {
   spec: ActorSpec;
@@ -34,7 +39,7 @@ export function landDistance(world: World, to: Pos): Int16Array {
   const key = `${world.seed}:${to.x},${to.y}`;
   let d = distCache.get(key);
   if (!d) {
-    d = distanceMap(world.size, world.water, to);
+    d = distanceMap(world.size, world.solid, to); // around water and buildings
     distCache.set(key, d);
   }
   return d;
@@ -54,9 +59,10 @@ export function initialState(spec: ActorSpec, k: Knowledge): ActorState {
   return { spec, pos: spec.start, k, routeIdx: 0, isolatedFor: 0, mode: "patrol" };
 }
 
-function patrol(world: World, s: ActorState, speed: number): ActorState {
-  const route = routeFor(s.spec);
-  let { pos, routeIdx } = s;
+function patrol(world: World, s: ActorState, speed: number, extra?: ActorSpec): ActorState {
+  const route = extra ? [...routeFor(s.spec), ...routeFor(extra)] : routeFor(s.spec);
+  let { pos } = s;
+  let routeIdx = s.routeIdx % route.length;
   for (let i = 0; i < speed; i++) {
     if (samePos(pos, route[routeIdx])) routeIdx = (routeIdx + 1) % route.length;
     const goal = route[routeIdx];
@@ -68,7 +74,16 @@ function patrol(world: World, s: ActorState, speed: number): ActorState {
       else routeIdx = (routeIdx + 1) % route.length;
     }
   }
-  return { ...s, pos, routeIdx, mode: "patrol" };
+  return { ...s, pos, routeIdx, mode: extra ? "cover" : "patrol" };
+}
+
+// The partner whose sector this scout should also sweep, if it has gone quiet.
+function silentPartner(world: World, s: ActorState, tick: number): ActorSpec | undefined {
+  const id = PARTNER[s.spec.id];
+  if (!id || tick < CONFIG.coverAfter) return undefined;
+  const seen = s.k.seen[id];
+  if (seen && tick - seen.tick < CONFIG.coverAfter) return undefined;
+  return world.actors.find((a) => a.id === id);
 }
 
 // Rescue jobs this rescuer could still finish in time, most urgent first.
@@ -116,6 +131,14 @@ function decideScout(world: World, s: ActorState, tick: number): Decision {
       for (let i = 0; i < CONFIG.scoutSpeed; i++) pos = stepToward(pos, rescuers[0].pos);
       return { next: { ...s, pos, mode: "mule" }, candidates: [], reason: "Carrying news to the nearest rescuer" };
     }
+  }
+  const partner = silentPartner(world, s, tick);
+  if (partner) {
+    return {
+      next: patrol(world, s, CONFIG.scoutSpeed, partner),
+      candidates: [],
+      reason: `Covering ${partner.id === "S1" ? "Scout 1" : partner.id === "S2" ? "Scout 2" : partner.id === "S3" ? "Scout 3" : "Scout 4"}'s sector while it is out of contact`,
+    };
   }
   return { next: patrol(world, s, CONFIG.scoutSpeed), candidates: [], reason: "Sweeping my sector" };
 }

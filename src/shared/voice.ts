@@ -47,6 +47,16 @@ export type HqLine = keyof typeof HQ_LINES;
 
 export const clipUrl = (speaker: Speaker, clip: string) => `/audio/${speaker}/${clip}.mp3`;
 
+// The closing line, one clip per possible count, so it plays the moment the
+// mission ends instead of being stitched together.
+export function resultText(reached: number, total: number): string {
+  const word = (n: number) => (n === 0 ? "None" : NUMBERS[n - 1][0].toUpperCase() + NUMBERS[n - 1].slice(1));
+  return reached === total
+    ? `Mission complete. All ${NUMBERS[total - 1]} survivors reached.`
+    : `Mission complete. ${word(reached)} of ${NUMBERS[total - 1]} survivors reached.`;
+}
+export const resultClip = (reached: number) => clipUrl("HQ", `result-${reached}`);
+
 // The clip sequence for one radio call.
 export function callClips(actor: ActorId, phrase: ActorPhrase, survivor?: number): string[] {
   const clips = [clipUrl(actor, "callsign"), clipUrl(actor, phrase)];
