@@ -1,19 +1,21 @@
-{
+﻿{
   "name": "blackout",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=24"
-  },
+  "engines": { "node": ">=24" },
   "scripts": {
     "sim": "node src/sim/cli.ts",
     "baseline": "node src/sim/baseline.ts",
     "test": "node --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:web": "esbuild src/live/phone.ts src/live/dashboard.ts --bundle --format=esm --target=es2022 --outdir=public/js",
+    "hub": "npm run build:web && node src/net/hub.ts",
+    "laptop": "node src/live/laptop.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.0"
   },
   "dependencies": {

@@ -61,7 +61,12 @@ function patrol(world: World, s: ActorState, speed: number): ActorState {
     if (samePos(pos, route[routeIdx])) routeIdx = (routeIdx + 1) % route.length;
     const goal = route[routeIdx];
     if (s.spec.role === "scout") pos = stepToward(pos, goal);
-    else pos = nextStep(world.size, landDistance(world, goal), pos) ?? pos;
+    else {
+      const next = nextStep(world.size, landDistance(world, goal), pos);
+      // Waypoint is on water or cut off: skip it rather than stand still.
+      if (next) pos = next;
+      else routeIdx = (routeIdx + 1) % route.length;
+    }
   }
   return { ...s, pos, routeIdx, mode: "patrol" };
 }

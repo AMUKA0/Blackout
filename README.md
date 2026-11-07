@@ -24,9 +24,9 @@ npm run baseline -- 50   # 3 conditions x 50 seeds, picks demo seeds
 
 1. Join both laptops and the phone to the **same phone hotspot**. Don't use venue Wi-Fi, because it usually blocks devices from talking to each other.
 2. On both laptops, set the hotspot network to **Private** (Settings > Network > the Wi-Fi network > Network profile). When Windows asks, allow Node through the firewall on private networks.
-3. On Laptop A, run `node src/net/hub.ts`. It prints the phone URL and Laptop B's `HUB=` address.
-4. On Laptop B, run `$env:HUB="<laptop A ip>"; node src/net/device.ts B` in PowerShell. Press `r` to switch the radio off and on.
-5. On the phone, open `http://<laptop A ip>:8080/phone`, tap **Start**, and set the screen timeout to the maximum.
-6. Press `s` in the hub terminal, or open `http://localhost:8080/` on Laptop A for the device check.
+3. On Laptop A, run `npm run hub` in one terminal. It builds the web pages and prints the phone URL and Laptop B's `HUB` address. Then run `npm run laptop -- A` in a second terminal for S1 and R1.
+4. On Laptop B, run `$env:HUB="<laptop A ip>"; npm run laptop -- B` in PowerShell. Its radio switches off and on by itself at the scripted ticks. Press `r` to toggle it by hand.
+5. On the phone, open `http://<laptop A ip>:8080/phone`, tap **Start**, and set the screen timeout to the maximum. Airplane mode is its radio switch.
+6. Open `http://localhost:8080/` on Laptop A for the HQ dashboard, then press `s` in the hub terminal to start a 100-second mission. The seed is set with `$env:SEED`, and defaults to 3.
 
 If the hotspot fails, use Windows Mobile Hotspot on Laptop A instead.

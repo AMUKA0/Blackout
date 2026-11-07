@@ -1,4 +1,4 @@
-﻿// All tunable numbers live here so the simulator, devices and dashboard agree.
+// All tunable numbers live here so the simulator, devices and dashboard agree.
 export const CONFIG = {
   size: 16,
   missionTicks: 100,
