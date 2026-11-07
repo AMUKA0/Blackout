@@ -64,6 +64,7 @@ function drawMap(actors: ObservedActor[], links: [string, string][]) {
 }
 
 let radio: HqRadio | null = null;
+$("n8n-toggle").onclick = () => void fetch("/api/n8n/toggle", { method: "POST" });
 $("radio").onclick = async () => {
   const ctx = new AudioContext();
   await ctx.resume();
@@ -86,6 +87,14 @@ function connect() {
       const g = m.gemini;
       $("gemini").textContent = g.state === "ok" ? `Gemini live · ${g.calls} calls` : g.state === "error" ? `Gemini unreachable · rules only` : "Gemini idle";
       $("gemini").className = `badge ${g.state}`;
+      const n = m.n8n;
+      $("n8n").textContent =
+        n.state === "off" ? "n8n not configured"
+        : n.state === "blocked" ? `n8n link cut · ${n.queued} queued`
+        : n.state === "down" ? `n8n unreachable · ${n.queued} queued`
+        : `n8n live · ${n.sent} sent${n.queued ? ` · ${n.queued} queued` : ""}`;
+      $("n8n").className = `badge ${n.state}`;
+      $("n8n-toggle").textContent = n.state === "blocked" ? "Restore n8n link" : "Cut n8n link";
       $("orders").innerHTML = m.plan
         ? `<p class="commander">${m.plan.commander}</p>` +
           Object.entries(m.plan.intents)

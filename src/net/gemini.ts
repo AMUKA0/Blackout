@@ -88,6 +88,23 @@ export async function decide(req: DecideRequest, timeoutMs = 3000): Promise<Deci
   }
 }
 
+// Three plain sentences for the n8n hospital pre-alert. Falls back to a
+// template in the hub if this fails or takes too long.
+export async function summarise(report: Record<string, unknown>, timeoutMs = 4000): Promise<string> {
+  const c = client();
+  if (!c) throw new Error("no gemini");
+  const call = c.models.generateContent({
+    model: FLASH,
+    contents: `Write a 3 sentence after-action summary of this flood rescue mission for a hospital pre-alert. Plain English, no em dashes, specific numbers, no hype. Mention work done while actors were out of contact. Only state what the data shows: survivors not reached are "not reached", never deaths or fatalities, and do not add medical details.\n${JSON.stringify(report)}`,
+    config: { maxOutputTokens: 1024, temperature: 0.3, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
+  });
+  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), timeoutMs));
+  const r = await Promise.race([call, timeout]);
+  const text = (r.text ?? "").trim();
+  if (!text) throw new Error("empty");
+  return text;
+}
+
 // Argon writes each actor's standing orders before the mission. Cached to
 // plans/plan-<seed>.json so the demo never waits on it.
 export type Plan = { seed: number; model: string; commander: string; intents: Record<ActorId, string> };

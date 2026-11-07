@@ -1,0 +1,284 @@
+{
+  "name": "Blackout HQ link",
+  "nodes": [
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000001",
+      "name": "Blackout hub",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "6b1f6a52-3c1e-4d55-9b0e-b1ac0ff00001",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "blackout",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000002",
+      "name": "Route by kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "k-status",
+                    "leftValue": "={{ $json.body.kind }}",
+                    "rightValue": "status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "k-events",
+                    "leftValue": "={{ $json.body.kind }}",
+                    "rightValue": "events",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "events"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "k-report",
+                    "leftValue": "={{ $json.body.kind }}",
+                    "rightValue": "report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "report"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000003",
+      "name": "Watchdog: incidents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const heldNote = (b) => b.heldMs > 4000 ? `[held ${Math.round(b.heldMs / 1000)}s in the hub outbox while n8n was unreachable, ${b.backlog} more queued] ` : '';\n// Opens an incident when a team goes quiet, closes it with the duration when it returns.\nconst store = $getWorkflowStaticData('global');\nstore.incidents = store.incidents || {};\nconst out = [];\nfor (const item of $input.all()) {\n  const b = item.json.body;\n  let content;\n  if (!b.online) {\n    store.incidents[b.device] = { openedAt: b.at, tick: b.tick };\n    content = `INCIDENT OPEN: ${b.label} lost contact at t${b.tick}. Actors ${b.actors.join(', ')} continue on standing orders.`;\n  } else {\n    const inc = store.incidents[b.device];\n    delete store.incidents[b.device];\n    const secs = inc ? Math.round((b.at - inc.openedAt) / 1000) : null;\n    content = `INCIDENT CLOSED: ${b.label} back in contact at t${b.tick}${secs !== null ? ` after ${secs}s dark` : ''}. Merging their reports.`;\n  }\n  out.push({ json: { kind: 'status', device: b.device, online: b.online, content: heldNote(b) + content, openIncidents: Object.keys(store.incidents), discord: b.discord || '' } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000004",
+      "name": "Field log and backlog",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const heldNote = (b) => b.heldMs > 4000 ? `[held ${Math.round(b.heldMs / 1000)}s in the hub outbox while n8n was unreachable, ${b.backlog} more queued] ` : '';\n// Summarises a batch of field events. A late batch is a team's backlog arriving after a blackout.\nconst out = [];\nfor (const item of $input.all()) {\n  const b = item.json.body;\n  const lines = b.events.map((e) => `t${e.tick} ${e.text}${e.late ? ' (reported late)' : ''}`);\n  const rescues = b.events.filter((e) => e.type === 'rescued').length;\n  const content = b.lateCount > 0\n    ? `BACKLOG RECEIVED: ${b.lateCount} reports written while out of contact by ${b.lateFrom.join(', ')}.\\n${lines.slice(0, 10).join('\\n')}`\n    : `Field log t${b.tick}: ${lines.join('; ')}`;\n  const notify = b.lateCount > 0 || rescues > 0;\n  out.push({ json: { kind: 'events', content: heldNote(b) + content, events: b.events.length, rescues, late: b.lateCount, discord: notify ? (b.discord || '') : '' } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000005",
+      "name": "Hospital pre-alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const heldNote = (b) => b.heldMs > 4000 ? `[held ${Math.round(b.heldMs / 1000)}s in the hub outbox while n8n was unreachable, ${b.backlog} more queued] ` : '';\n// The end-of-mission report becomes a hospital pre-alert.\nconst b = $input.first().json.body;\nconst incoming = b.survivors.map((s) => `#${s.id} (${s.by}, t${s.tick})`).join(', ');\nconst content = [\n  'HOSPITAL PRE-ALERT',\n  `${b.rescued} of ${b.total} survivors extracted, ${b.lost} not reached.`,\n  `Incoming: ${incoming || 'none'}`,\n  b.summary,\n  `Out of contact: ${b.offlineFinds} found, ${b.offlineRescues} rescued. Conflicts resolved: ${b.conflicts}. Wasted trips: ${b.wasted}. Late reports: ${b.lateReports}.`,\n].join('\\n');\nreturn [{ json: { kind: 'report', content: heldNote(b) + content, rescued: b.rescued, total: b.total, discord: b.discord || '' } }];"
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000006",
+      "name": "Discord set?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-discord",
+              "leftValue": "={{ $json.discord }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c3d2-0000-4000-8000-000000000007",
+      "name": "Post to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.discord }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.content.slice(0, 1900) }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Blackout hub": {
+      "main": [
+        [
+          {
+            "node": "Route by kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by kind": {
+      "main": [
+        [
+          {
+            "node": "Watchdog: incidents",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Field log and backlog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Hospital pre-alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watchdog: incidents": {
+      "main": [
+        [
+          {
+            "node": "Discord set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Field log and backlog": {
+      "main": [
+        [
+          {
+            "node": "Discord set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hospital pre-alert": {
+      "main": [
+        [
+          {
+            "node": "Discord set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord set?": {
+      "main": [
+        [
+          {
+            "node": "Post to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

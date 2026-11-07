@@ -33,11 +33,13 @@
   .badge.ok { border-color: var(--save); color: var(--save); } .badge.error { border-color: var(--cut); color: var(--cut); }
   #radio { margin-left: auto; font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; border: 0; background: var(--navy); color: #fff; cursor: pointer; }
   #radio[disabled] { opacity: .6; cursor: default; }
+  .ghost { font: inherit; font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 2px solid var(--navy); background: transparent; color: var(--navy); cursor: pointer; }
+  .badge.blocked, .badge.down { border-color: var(--cut); color: var(--cut); }
   .commander { margin: 0 0 6px; font-style: italic; }
 </style>
 </head>
 <body>
-  <header><h1>Blackout HQ</h1><span id="tick"></span><span id="mission"></span><span id="gemini" class="badge">Gemini idle</span><button id="radio">Turn on radio</button></header>
+  <header><h1>Blackout HQ</h1><span id="tick"></span><span id="mission"></span><span id="gemini" class="badge">Gemini idle</span><span id="n8n" class="badge">n8n</span><button id="n8n-toggle" class="ghost">Cut n8n link</button><button id="radio">Turn on radio</button></header>
   <div class="layout">
     <svg id="map" role="img" aria-label="Map of actors, links and survivors"></svg>
     <section>

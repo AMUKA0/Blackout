@@ -49,6 +49,7 @@ export type FromHub =
       events: (StepEvent & { device: DeviceId; late: boolean; arrived: number })[];
       gemini: { state: string; calls: number; failures: number };
       plan: { commander: string; intents: Partial<Record<ActorId, string>> } | null;
+      n8n: { state: string; queued: number; sent: number };
     };
 
 export type Sample = { offset: number; rtt: number };

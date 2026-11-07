@@ -11,7 +11,8 @@
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "build:web": "esbuild src/live/phone.ts src/live/dashboard.ts --bundle --format=esm --target=es2022 --outdir=public/js",
-    "hub": "npm run build:web && node src/net/hub.ts",
+    "hub": "npm run build:web && node --env-file-if-exists=.env.local src/net/hub.ts",
+    "n8n:deploy": "node --env-file-if-exists=.env.local scripts/n8n-deploy.ts",
     "laptop": "node src/live/laptop.ts"
   },
   "devDependencies": {
