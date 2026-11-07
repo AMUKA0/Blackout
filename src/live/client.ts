@@ -14,12 +14,13 @@ type Sock = {
   onerror: ((e: unknown) => void) | null;
 };
 
-export type ClientState = "connecting" | "online" | "offline" | "radio off";
+export type ClientState = "connecting" | "online" | "offline" | "radio off" | "replaced";
 
 export class HubClient {
   state: ClientState = "connecting";
   mission: Mission | null = null;
   radioBlocked = false; // also blocks this device's Gemini and ElevenLabs calls
+  replaced = false;
   private ws: Sock | null = null;
   private offset = 0;
   private samples: Sample[] = [];
@@ -63,6 +64,7 @@ export class HubClient {
   }
 
   setRadio(on: boolean) {
+    if (this.replaced) return;
     this.radioBlocked = !on;
     if (!on) {
       this.state = "radio off";
@@ -90,6 +92,14 @@ export class HubClient {
     sock.onmessage = (e) => {
       this.lastFromHub = Date.now();
       const m = JSON.parse(String(e.data)) as FromHub;
+      if (m.type === "kicked") {
+        // Another tab or laptop is now this device. Stop for good.
+        this.replaced = true;
+        this.radioBlocked = true;
+        this.state = "replaced";
+        sock.close();
+        return;
+      }
       if (m.type === "pong") {
         this.samples.push(offsetFrom(m.t1, m.server, Date.now()));
         if (this.samples.length > 20) this.samples.shift();
@@ -104,6 +114,7 @@ export class HubClient {
     };
     sock.onclose = () => {
       if (this.ws === sock) this.ws = null;
+      if (this.replaced) return;
       this.state = this.radioBlocked ? "radio off" : "offline";
       if (!this.radioBlocked) setTimeout(() => this.connect(), 500);
     };

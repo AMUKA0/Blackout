@@ -5,6 +5,7 @@ import { networkInterfaces } from "node:os";
 import { extname } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { applyFault } from "../sim/engine.ts";
+import { CONFIG } from "../shared/config.ts";
 import { DEMO_FAULTS } from "../shared/faults.ts";
 import { radioLinks, type StepEvent } from "../shared/step.ts";
 import type { ActorId, DeviceId } from "../shared/types.ts";
@@ -121,10 +122,18 @@ wss.on("connection", (ws) => {
       me = m.device;
       if (m.device === "dashboard") dashboards.add(ws);
       else {
+        // One client per device: the newest takes over, the old one stops.
+        const old = sockets.get(m.device);
+        if (old && old !== ws && old.readyState === old.OPEN) {
+          send(old, { type: "kicked", reason: `another ${m.device} connected` });
+          old.close();
+          console.log(`a new ${m.device} client replaced the old one`);
+        }
         sockets.set(m.device, ws);
         lastSeen.set(m.device, { at: Date.now(), tick: -1 });
       }
-      if (!started && m.mission) {
+      // Only adopt a mission from a device if it is still running.
+      if (!started && m.mission && tickAt(Date.now(), m.mission.t0) < CONFIG.missionTicks) {
         started = m.mission;
         console.log(`recovered running mission from ${m.device}, seed ${started.seed}`);
       }

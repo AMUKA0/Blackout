@@ -36,6 +36,7 @@ export type ObservedActor = BeaconActor & { device: DeviceId; tick: number; onli
 
 export type FromHub =
   | { type: "pong"; t1: number; server: number }
+  | { type: "kicked"; reason: string } // another client took over this device
   | { type: "start"; t0: number; seed: number }
   | { type: "status"; devices: DeviceStatus[]; started: Mission | null }
   | { type: "relay"; from: ActorId; to: ActorId[]; tick: number; k: Knowledge }

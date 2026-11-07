@@ -41,7 +41,8 @@ const $ = (id: string) => document.getElementById(id)!;
 setInterval(() => {
   const a = node?.actors[0];
   document.body.classList.toggle("offline", !client.online);
-  $("state").textContent = client.online ? "Linked" : "Alone, still working";
+  $("state").textContent = client.replaced ? "Replaced by another Scout 4 page" : client.online ? "Linked" : "Alone, still working";
+  if (client.replaced) node?.stop();
   $("doing").textContent = a ? (node!.reasons.get(a.spec.id) ?? "") : "Waiting for mission";
   $("stats").textContent = a ? `found ${found} · alone ${alone}s · at ${a.pos.x},${a.pos.y}` : "";
   $("meta").textContent = `tick ${client.tick()} · clock offset ${client.clockOffset().toFixed(0)} ms`;

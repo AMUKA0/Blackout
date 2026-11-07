@@ -31,6 +31,10 @@ setInterval(() => {
 let lastLine = "";
 setInterval(() => {
   const actors = node?.actors.map((a) => `${a.spec.id}@${a.pos.x},${a.pos.y}:${a.mode}`).join(" ") ?? "";
+  if (client.replaced) {
+    console.log(`another ${device} connected to the hub; this one is stopping`);
+    process.exit(0);
+  }
   const line = `${device} ${client.state.padEnd(10)} tick ${client.tick()}  ${actors}`;
   if (line !== lastLine) console.log(line);
   lastLine = line;
