@@ -1,0 +1,173 @@
+import { CONFIG } from "./config.ts";
+import { cheb, distanceMap, nextStep, samePos, stepToward } from "./geo.ts";
+import { claimWinner, withClaim, type Knowledge } from "./knowledge.ts";
+import { patrolRoute } from "./world.ts";
+import type { ActorId, ActorSpec, Pos, World } from "./types.ts";
+
+// The rule brain. It runs on every device with no network and no model.
+// Gemini later only picks among the candidates this file produces.
+
+export type Mode = "patrol" | "rescue" | "rescuing" | "mule" | "frozen";
+
+export type ActorState = {
+  spec: ActorSpec;
+  pos: Pos;
+  k: Knowledge;
+  target?: number; // survivor id a rescuer is heading to
+  rescuingUntil?: number;
+  routeIdx: number;
+  isolatedFor: number; // consecutive ticks with no radio neighbour
+  mode: Mode;
+};
+
+export type Candidate = { survivor: number; eta: number; slack: number };
+
+export type Decision = {
+  next: ActorState;
+  conflictWith?: { survivor: number; winner: ActorId }; // lost a claim on merge
+  candidates: Candidate[];
+  reason: string;
+};
+
+const distCache = new Map<string, Int16Array>();
+export function landDistance(world: World, to: Pos): Int16Array {
+  const key = `${world.seed}:${to.x},${to.y}`;
+  let d = distCache.get(key);
+  if (!d) {
+    d = distanceMap(world.size, world.water, to);
+    distCache.set(key, d);
+  }
+  return d;
+}
+
+const routes = new Map<string, Pos[]>();
+function routeFor(spec: ActorSpec): Pos[] {
+  let r = routes.get(spec.id);
+  if (!r) {
+    r = patrolRoute(spec.area, spec.role === "scout" ? CONFIG.scoutSense : CONFIG.rescuerSense);
+    routes.set(spec.id, r);
+  }
+  return r;
+}
+
+export function initialState(spec: ActorSpec, k: Knowledge): ActorState {
+  return { spec, pos: spec.start, k, routeIdx: 0, isolatedFor: 0, mode: "patrol" };
+}
+
+function patrol(world: World, s: ActorState, speed: number): ActorState {
+  const route = routeFor(s.spec);
+  let { pos, routeIdx } = s;
+  for (let i = 0; i < speed; i++) {
+    if (samePos(pos, route[routeIdx])) routeIdx = (routeIdx + 1) % route.length;
+    const goal = route[routeIdx];
+    if (s.spec.role === "scout") pos = stepToward(pos, goal);
+    else pos = nextStep(world.size, landDistance(world, goal), pos) ?? pos;
+  }
+  return { ...s, pos, routeIdx, mode: "patrol" };
+}
+
+// Rescue jobs this rescuer could still finish in time, most urgent first.
+export function rescueCandidates(world: World, s: ActorState, tick: number): Candidate[] {
+  const out: Candidate[] = [];
+  for (const [key, f] of Object.entries(s.k.found)) {
+    const id = +key;
+    if (s.k.rescued[id]) continue;
+    const owner = claimWinner(s.k, id);
+    if (owner && owner !== s.spec.id) continue;
+    const d = landDistance(world, f.pos)[s.pos.y * world.size + s.pos.x];
+    if (d < 0) continue;
+    const eta = tick + Math.ceil(d / CONFIG.rescuerSpeed);
+    const slack = f.deadline - (eta + CONFIG.rescueTicks);
+    if (slack < 0) continue;
+    out.push({ survivor: id, eta, slack });
+  }
+  out.sort((a, b) => a.slack - b.slack || a.eta - b.eta || a.survivor - b.survivor);
+  return out;
+}
+
+export function decide(
+  world: World,
+  s: ActorState,
+  tick: number,
+  pick?: (c: Candidate[]) => number | undefined, // optional override (Gemini)
+): Decision {
+  if (s.spec.role === "scout") return decideScout(world, s, tick);
+  return decideRescuer(world, s, tick, pick);
+}
+
+function decideScout(world: World, s: ActorState, tick: number): Decision {
+  // Alone for a while and holding news nobody has acted on: carry it to the
+  // nearest rescuer we last saw. This is the store-and-forward behaviour.
+  if (s.isolatedFor >= CONFIG.muleAfter) {
+    const news = Object.entries(s.k.found).some(
+      ([id, f]) => f.by === s.spec.id && !s.k.rescued[+id] && !claimWinner(s.k, +id) && f.deadline > tick,
+    );
+    const rescuers = (["R1", "R2"] as const)
+      .map((r) => s.k.seen[r])
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => cheb(a.pos, s.pos) - cheb(b.pos, s.pos));
+    if (news && rescuers.length > 0) {
+      let pos = s.pos;
+      for (let i = 0; i < CONFIG.scoutSpeed; i++) pos = stepToward(pos, rescuers[0].pos);
+      return { next: { ...s, pos, mode: "mule" }, candidates: [], reason: "Carrying news to the nearest rescuer" };
+    }
+  }
+  return { next: patrol(world, s, CONFIG.scoutSpeed), candidates: [], reason: "Sweeping my sector" };
+}
+
+function decideRescuer(
+  world: World,
+  s: ActorState,
+  tick: number,
+  pick?: (c: Candidate[]) => number | undefined,
+): Decision {
+  if (s.rescuingUntil !== undefined) {
+    return { next: { ...s, mode: "rescuing" }, candidates: [], reason: "Extracting survivor" };
+  }
+
+  let state = s;
+  let conflictWith: Decision["conflictWith"];
+
+  // Did a merge just tell us someone else owns our target?
+  if (state.target !== undefined) {
+    const owner = claimWinner(state.k, state.target);
+    const done = !!state.k.rescued[state.target];
+    if (owner && owner !== state.spec.id && !done) conflictWith = { survivor: state.target, winner: owner };
+    if ((owner && owner !== state.spec.id) || done) state = { ...state, target: undefined };
+  }
+
+  const candidates = rescueCandidates(world, state, tick);
+  const current = candidates.find((c) => c.survivor === state.target);
+  let chosen = current;
+  if (!chosen && candidates.length > 0) {
+    const override = pick?.(candidates.slice(0, 3));
+    chosen = candidates.find((c) => c.survivor === override) ?? candidates[0];
+  }
+
+  // Release an old claim we are walking away from.
+  let k = state.k;
+  if (s.target !== undefined && s.target !== chosen?.survivor && !k.rescued[s.target]) {
+    const mine = k.claims[s.target]?.[s.spec.id];
+    if (mine && !mine.released) k = withClaim(k, s.target, s.spec.id, { ...mine, tick, released: true });
+  }
+
+  if (!chosen) {
+    const moved = patrol(world, { ...state, k, target: undefined }, CONFIG.rescuerSpeed);
+    return { next: moved, conflictWith, candidates, reason: "No known survivors, searching my half" };
+  }
+
+  const prev = k.claims[chosen.survivor]?.[s.spec.id];
+  if (!prev || prev.released || prev.eta !== chosen.eta) {
+    k = withClaim(k, chosen.survivor, s.spec.id, { eta: chosen.eta, tick, released: false });
+  }
+
+  const goal = k.found[chosen.survivor].pos;
+  let pos = state.pos;
+  for (let i = 0; i < CONFIG.rescuerSpeed; i++) pos = nextStep(world.size, landDistance(world, goal), pos) ?? pos;
+  return {
+    next: { ...state, k, pos, target: chosen.survivor, mode: "rescue" },
+    conflictWith,
+    candidates,
+    reason: `Heading to survivor ${chosen.survivor}, ${chosen.slack} ticks to spare`,
+  };
+}

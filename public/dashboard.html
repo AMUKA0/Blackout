@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackout HQ</title>
+<style>
+  :root { --navy: #0b1f5c; --link: #8fb0e8; --pink: #f4b6c2; --cut: #c4163c; --paper: #f5f2ec; }
+  body { margin: 0; background: var(--paper); color: var(--navy); font-family: system-ui, sans-serif; padding: 2rem; }
+  h1 { margin: 0 0 1.5rem; font-size: 2rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .card { border-radius: 16px; padding: 1.2rem 1.4rem; background: white; border: 3px solid var(--link); }
+  .card.down { background: var(--pink); border-color: var(--cut); }
+  .name { font-size: 1.3rem; font-weight: 700; }
+  .meta { margin-top: .4rem; font-variant-numeric: tabular-nums; opacity: .8; }
+  #mission { margin-bottom: 1rem; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Blackout HQ: device check</h1>
+  <div id="mission">No mission running. Press "s" in the hub terminal.</div>
+  <div class="grid" id="grid"></div>
+<script type="module">
+  const names = { A: "Laptop A (S1, R1)", B: "Laptop B (S2, S3, R2)", phone: "Phone (S4)" };
+  function connect() {
+    const ws = new WebSocket(`ws://${location.host}`);
+    ws.onopen = () => ws.send(JSON.stringify({ type: "hello", device: "dashboard" }));
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type !== "status") return;
+      document.getElementById("mission").textContent = m.started
+        ? `Mission running, seed ${m.started.seed}, tick ${Math.floor((Date.now() - m.started.t0) / 1000)}`
+        : 'No mission running. Press "s" in the hub terminal.';
+      document.getElementById("grid").innerHTML = m.devices.map((d) => `
+        <div class="card ${d.online ? "" : "down"}">
+          <div class="name">${names[d.device]}</div>
+          <div class="meta">${d.online ? "linked" : "no contact"} · last heard ${d.lastSeenMs < 0 ? "never" : (d.lastSeenMs / 1000).toFixed(1) + "s ago"}</div>
+          <div class="meta">reports tick ${d.tick}</div>
+        </div>`).join("");
+    };
+    ws.onclose = () => setTimeout(connect, 500);
+  }
+  connect();
+</script>
+</body>
+</html>

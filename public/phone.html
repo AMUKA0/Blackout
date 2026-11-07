@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blackout: Scout 4</title>
+<style>
+  :root { --navy: #0b1f5c; --link: #8fb0e8; --pink: #f4b6c2; --cut: #c4163c; --paper: #f5f2ec; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  body { background: var(--navy); color: white; display: grid; place-items: center; text-align: center; transition: background .3s; }
+  body.offline { background: var(--pink); color: var(--navy); }
+  #start { font-size: 1.4rem; padding: 1.2rem 2.4rem; border: 0; border-radius: 999px; background: white; color: var(--navy); font-weight: 700; }
+  .id { font-size: 3.5rem; font-weight: 800; letter-spacing: .02em; }
+  .state { font-size: 1.6rem; margin-top: .4rem; }
+  .meta { opacity: .75; margin-top: 1rem; font-variant-numeric: tabular-nums; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <button id="start">Tap to start Scout 4</button>
+  <main id="ui" hidden>
+    <div class="id">S4</div>
+    <div class="state" id="state">connecting</div>
+    <div class="meta" id="meta"></div>
+  </main>
+<script type="module">
+  const HEARTBEAT_MS = 500, DEAD_AFTER_MS = 2000, DEVICE = "phone";
+  let ws = null, lastFromHub = 0, offset = 0, samples = [], mission = null, state = "connecting";
+  const hubNow = () => Date.now() + offset;
+  const tick = () => mission ? Math.floor((hubNow() - mission.t0) / 1000) : -1;
+  const send = (m) => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
+
+  function connect() {
+    state = "connecting";
+    const sock = new WebSocket(`ws://${location.host}`);
+    ws = sock;
+    sock.onopen = () => {
+      state = "online"; lastFromHub = Date.now();
+      send({ type: "hello", device: DEVICE, mission });
+      for (let i = 0; i < 5; i++) setTimeout(() => send({ type: "ping", t1: Date.now() }), i * 100);
+    };
+    sock.onmessage = (e) => {
+      lastFromHub = Date.now();
+      const m = JSON.parse(e.data);
+      if (m.type === "pong") {
+        const rtt = Date.now() - m.t1;
+        samples.push({ offset: m.server - (m.t1 + rtt / 2), rtt });
+        if (samples.length > 20) samples.shift();
+        offset = samples.reduce((a, b) => (b.rtt < a.rtt ? b : a)).offset;
+      } else if (m.type === "start") mission = { t0: m.t0, seed: m.seed };
+    };
+    sock.onclose = () => { if (ws === sock) ws = null; state = "offline"; setTimeout(connect, 500); };
+  }
+
+  setInterval(() => {
+    send({ type: "hb", device: DEVICE, tick: tick() });
+    if (ws && ws.readyState === 1 && Date.now() - lastFromHub > DEAD_AFTER_MS) ws.close();
+  }, HEARTBEAT_MS);
+  setInterval(() => send({ type: "ping", t1: Date.now() }), 5000);
+
+  setInterval(() => {
+    document.body.classList.toggle("offline", state !== "online");
+    document.getElementById("state").textContent = state === "online" ? "Linked" : "Alone, still working";
+    document.getElementById("meta").textContent = `tick ${tick()} · clock offset ${offset.toFixed(0)} ms`;
+  }, 250);
+
+  // A tap is required before the browser allows audio. Later this button also
+  // decodes every pre-rendered voice clip into memory.
+  document.getElementById("start").onclick = async () => {
+    try { const ctx = new AudioContext(); await ctx.resume(); window.__audio = ctx; } catch {}
+    document.getElementById("start").hidden = true;
+    document.getElementById("ui").hidden = false;
+    connect();
+  };
+</script>
+</body>
+</html>
