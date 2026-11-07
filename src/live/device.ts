@@ -21,6 +21,7 @@ function render(s: DeviceViewState) {
   const off = s.link !== "online";
   const anyDown = s.actors.some((a) => a.crashedAt !== undefined);
   document.body.classList.toggle("off", off);
+  document.body.classList.toggle("huboff", !off && s.hubOffline);
   $("title").textContent = `Laptop ${s.device}`;
   $("clock").textContent = s.tick >= 0 ? `t${Math.min(s.tick, 100)}` : "t–";
   const dark = s.offlineSince !== null && s.tick >= 0 ? Math.max(0, Math.min(s.tick, 99) - s.offlineSince) : 0;
@@ -30,6 +31,9 @@ function render(s: DeviceViewState) {
   } else if (off) {
     $("headline").textContent = `No contact ${dark}s. Still working.`;
     $("subline").textContent = "No hub, no Gemini. These actors keep sweeping and rescuing on their standing orders.";
+  } else if (s.hubOffline) {
+    $("headline").textContent = "Hub offline. Working as a team.";
+    $("subline").textContent = "No relay to the other teams and no Gemini. These actors still share with each other and keep going.";
   } else if (anyDown) {
     $("headline").textContent = "Drone down. Mayday sent.";
     $("subline").textContent = "Its partner flies to the wreck to pick up its survivor reports, then covers its sector.";

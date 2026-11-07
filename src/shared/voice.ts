@@ -44,6 +44,8 @@ export const HQ_LINES = {
   backPhone: "Scout Four is back.",
   rulesOnly: "Gemini unreachable. Actors running on rules.",
   droneDown: "Drone down. Its partner is going to recover its reports.",
+  hubOffline: "Hub offline. Every team is on its own, talking only within its group.",
+  hubOnline: "Hub back online. Relaying between teams again.",
   done: "Mission complete.",
 } as const;
 export type HqLine = keyof typeof HQ_LINES;

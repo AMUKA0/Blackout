@@ -12,6 +12,7 @@ export type DeviceViewState = {
   link: string; // client state: online, radio off, offline...
   tick: number;
   offlineSince: number | null;
+  hubOffline: boolean;
   actors: { id: string; pos: Pos; mode: string; reason: string; found: number; rescued: number; crashedAt?: number }[];
 };
 
@@ -29,6 +30,8 @@ export function startDeviceView(port: number, getState: () => DeviceViewState, o
     createReadStream(file).pipe(res);
   });
   const wss = new WebSocketServer({ server: http });
+  // A port already in use must never take the laptop's actors down with it.
+  wss.on("error", () => {});
   const clients = new Set<WebSocket>();
   wss.on("connection", (ws) => {
     clients.add(ws);

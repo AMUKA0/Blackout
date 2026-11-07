@@ -21,6 +21,8 @@ export class HubClient {
   mission: Mission | null = null;
   radioBlocked = false; // also blocks this device's Gemini and ElevenLabs calls
   replaced = false;
+  hubOffline = false; // the hub says it is (simulated) offline: no relay between teams
+  hubOfflineSince: number | null = null;
   private ws: Sock | null = null;
   private offset = 0;
   private samples: Sample[] = [];
@@ -119,6 +121,10 @@ export class HubClient {
         this.state = "replaced";
         sock.close();
         return;
+      }
+      if (m.type === "status") {
+        this.hubOffline = !!m.hubOffline;
+        this.hubOfflineSince = m.hubOfflineSince ?? null;
       }
       if (m.type === "pong") {
         this.samples.push(offsetFrom(m.t1, m.server, Date.now()));

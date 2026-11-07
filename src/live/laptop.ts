@@ -39,11 +39,12 @@ client.onMission = (m) => {
 client.start();
 
 // This laptop's own screen: its craft, served locally so it works offline.
-startDeviceView(device === "A" ? 8081 : 8082, () => ({
+startDeviceView(Number(process.env.VIEW_PORT ?? (device === "A" ? 8081 : 8082)), () => ({
   device,
   link: client.state,
   tick: client.tick(),
   offlineSince,
+  hubOffline: client.hubOffline,
   actors: (node?.actors ?? []).map((a) => ({
     id: a.spec.id,
     pos: a.pos,
@@ -77,7 +78,7 @@ setInterval(() => {
   lastLine = line;
 }, 1000);
 
-console.log(`device ${device} -> ws://${hub}:${PORT}. "r" toggles radio, "q" quits.`);
+console.log(`device ${device} -> ws://${target}. "r" toggles radio, "q" quits.`);
 if (process.stdin.isTTY) {
   process.stdin.setRawMode(true);
   process.stdin.on("data", (b) => {

@@ -26,6 +26,32 @@ const latest = new Map<ActorId, ObservedActor>();
 const recentEvents: (StepEvent & { device: DeviceId; late: boolean; arrived: number })[] = [];
 const truth: { survivor: number; tick: number; by: ActorId }[] = [];
 let started: Mission | null = null;
+
+// Simulated hub outage. The hub process keeps running so the demo can show
+// what happens, but it behaves as if it were gone: no relay between devices,
+// no Gemini, n8n held, rescue confirmations held. Each device keeps sharing
+// inside its own group. The dashboard keeps showing device telemetry.
+let hubDown = false;
+let hubDownSince: number | null = null;
+let n8nWasBlocked = false;
+const heldTruth: { type: "truth"; survivor: number; tick: number; by: ActorId }[] = [];
+
+function setHub(down: boolean) {
+  if (down === hubDown) return;
+  hubDown = down;
+  const tick = started ? tickAt(Date.now(), started.t0) : -1;
+  if (down) {
+    hubDownSince = tick;
+    n8nWasBlocked = n8n.blocked;
+    n8n.setBlocked(true);
+    console.log("HUB OFFLINE (simulated): no relay, no Gemini, n8n held");
+  } else {
+    hubDownSince = null;
+    n8n.setBlocked(n8nWasBlocked);
+    for (const t of heldTruth.splice(0)) for (const [, s] of sockets) send(s, t);
+    console.log("hub back online: relaying again");
+  }
+}
 let plan: Plan | null = null;
 
 // n8n: every status change, a batch of events every 3s, and one report at the end.
@@ -136,6 +162,8 @@ function startMission() {
   n8nBatch = [];
   reportSent = false;
   wasOnline.clear();
+  setHub(false);
+  heldTruth.length = 0;
   loadPlan(SEED);
   broadcastAll({ type: "start", ...started });
   console.log(`mission starts in 3s, seed ${SEED}`);
@@ -168,6 +196,15 @@ const http = createServer((req, res) => {
     n8n.setBlocked(!n8n.blocked);
     console.log(n8n.blocked ? "n8n link BLOCKED (simulated outage), queueing" : "n8n link restored, replaying queue");
     res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ blocked: n8n.blocked }));
+    return;
+  }
+  if (req.method === "POST" && url === "/api/hub/toggle") {
+    setHub(!hubDown);
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ hubOffline: hubDown }));
+    return;
+  }
+  if (req.method === "POST" && url === "/api/decide" && hubDown) {
+    res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ error: "hub offline" }));
     return;
   }
   if (req.method === "POST" && url === "/api/decide") {
@@ -213,6 +250,8 @@ function currentLinks(tick: number) {
   const off = new Set<DeviceId>();
   for (const f of LINK_CUTS) if (f.tick <= tick && !("device" in f)) applyFault(f, cut, off);
   for (const d of DEVICES) if (!online(d)) off.add(d);
+  // Hub down: no radio between devices at all; links stay inside each group.
+  if (hubDown) for (const d of DEVICES) off.add(d);
   const actors = [...latest.values()].map((a) => ({ id: a.id, device: a.device, pos: a.pos, down: a.crashedAt !== undefined && tick > a.crashedAt }));
   // Scripted cuts between actors on devices HQ can still hear.
   const known = new Map(actors.map((a) => [a.id, a]));
@@ -265,7 +304,8 @@ wss.on("connection", (ws) => {
       if (!prior || m.tick < prior.tick || (m.tick === prior.tick && m.by < prior.by)) {
         if (prior) truth.splice(truth.indexOf(prior), 1);
         truth.push({ survivor: m.survivor, tick: m.tick, by: m.by });
-        for (const [, s] of sockets) if (s !== ws) send(s, m);
+        if (hubDown) heldTruth.push({ type: "truth", survivor: m.survivor, tick: m.tick, by: m.by });
+        else for (const [, s] of sockets) if (s !== ws) send(s, m);
       }
     } else if (m.type === "beacon") {
       lastSeen.set(m.device, { at: Date.now(), tick: m.tick });
@@ -288,6 +328,8 @@ wss.on("connection", (ws) => {
         if (recentEvents.length > 60) recentEvents.shift();
       }
       // Deliver each actor's state to the actors on other devices in range.
+      // With the hub down nothing crosses between devices.
+      if (hubDown) return;
       const { links } = currentLinks(m.tick);
       for (const a of m.actors) {
         const byDevice = new Map<DeviceId, ActorId[]>();
@@ -317,7 +359,7 @@ setInterval(() => {
   const st = status();
   // Status goes to devices too: it doubles as the keep-alive that tells a
   // device the hub is still there when none of its actors are in range.
-  broadcastAll({ type: "status", devices: st, started });
+  broadcastAll({ type: "status", devices: st, started, hubOffline: hubDown, hubOfflineSince: hubDownSince });
   const tick = started ? tickAt(Date.now(), started.t0) : -1;
   const { links, cuts } = currentLinks(tick);
   const actors = [...latest.values()].map((a) => ({ ...a, online: online(a.device) }));
@@ -358,6 +400,7 @@ if (process.stdin.isTTY) {
   process.stdin.on("data", (b) => {
     const key = String(b);
     if (key === "s") startMission();
+    if (key === "h") setHub(!hubDown);
     if (key === "n") {
       n8n.setBlocked(!n8n.blocked);
       console.log(n8n.blocked ? "n8n link BLOCKED (simulated outage), queueing" : "n8n link restored, replaying queue");

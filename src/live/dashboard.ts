@@ -101,7 +101,16 @@ function buildMap(w: World) {
   base.appendChild(el("text", { x: w.base.x * CELL - 2, y: w.base.y * CELL - 12, class: "m-base-label" }, "BASE"));
   svg.appendChild(base);
 
-  for (const name of ["halos", "zones", "buildings", "intent", "links", "survivors", "actors", "labels"]) {
+  // The hub, drawn as a radio mast at base: waves when up, a red cross when down.
+  const hub = el("g", { class: "m-hub", id: "hub-mast", transform: `translate(${(w.base.x + 1) * CELL} ${(w.base.y + 1) * CELL})` });
+  hub.appendChild(el("path", { d: "M0 -12 L-7 10 M0 -12 L7 10 M-4.5 3 H4.5", class: "mast" }));
+  hub.appendChild(el("circle", { cy: -13, r: 3, class: "dot" }));
+  hub.appendChild(el("path", { d: "M-9 -20 a12 12 0 0 1 18 0", class: "wave", style: "transform-origin:0 -13px" }));
+  hub.appendChild(el("path", { d: "M-14 -25 a19 19 0 0 1 28 0", class: "wave w2", style: "transform-origin:0 -13px" }));
+  hub.appendChild(el("path", { d: "M-9 -22 9 -4 M9 -22 -9 -4", class: "x" }));
+  svg.appendChild(hub);
+
+  for (const name of ["halos", "groups", "zones", "buildings", "intent", "links", "survivors", "actors", "labels"]) {
     layers[name] = el("g");
     svg.appendChild(layers[name]);
   }
@@ -292,13 +301,47 @@ function drawMoving(m: Observe, now: number) {
 }
 
 // ---------- map: per-update layer ----------
+let hubOffline = false;
+let hubOfflineSince: number | null = null;
+
 function drawMap(m: Observe) {
   if (!world) return;
   current = m;
 
+  // Hub down: mast turns red, and each team is outlined as its own island.
+  document.getElementById("hub-mast")?.setAttribute("class", hubOffline ? "m-hub off" : "m-hub");
+  layers.groups.replaceChildren();
+  layers.labels.replaceChildren(); // every label below is redrawn each update
+  if (hubOffline) {
+    const placed: { x: number; y: number; w: number }[] = [];
+    for (const d of ["A", "B", "phone"] as DeviceId[]) {
+      const members = m.actors.filter((a) => a.device === d && a.online && a.crashedAt === undefined);
+      if (members.length === 0) continue;
+      for (const [cls, filter, r] of [["m-group-fill", "storm", 1.6], ["m-group-edge", "storm-edge", 1.6]] as const) {
+        const wrap = el("g", { class: cls });
+        const blob = el("g", { filter: `url(#${filter})` });
+        for (const a of members) blob.appendChild(el("circle", { cx: cx(a.pos), cy: cy(a.pos), r: CELL * r }));
+        wrap.appendChild(blob);
+        layers.groups.appendChild(wrap);
+      }
+      // Tag sits by the group's centre; nudged down if it would hit another tag.
+      const mx = members.reduce((s, a) => s + cx(a.pos), 0) / members.length;
+      const my = members.reduce((s, a) => s + cy(a.pos), 0) / members.length;
+      const text = `${TEAM[d]} · on its own`;
+      const w = text.length * 6.6 + 22;
+      const x = Math.min(Math.max(mx - w / 2, 0), world.size * CELL - w);
+      let y = Math.min(Math.max(my + CELL * 0.9, 4), world.size * CELL - 26);
+      while (placed.some((p) => Math.abs(p.y - y) < 26 && x < p.x + p.w && p.x < x + w)) y = Math.min(y + 28, world.size * CELL - 26);
+      placed.push({ x, y, w });
+      const label = el("g", { class: "m-group-label" });
+      label.appendChild(el("rect", { x, y, width: w, height: 22, rx: 11 }));
+      label.appendChild(el("text", { x: x + 11, y: y + 15.5 }, text));
+      layers.labels.appendChild(label);
+    }
+  }
+
   // Storm cells over teams HQ cannot hear: two merged bands, like isobars.
   layers.zones.replaceChildren();
-  layers.labels.replaceChildren();
   for (const d of ["B", "phone"] as DeviceId[]) {
     const ghosts = m.actors.filter((a) => a.device === d && !a.online);
     if (ghosts.length === 0) continue;
@@ -570,6 +613,13 @@ function drawBand(m: Observe) {
         .map((b) => `<div class="result ${b.condition === "mesh" ? "ours" : ""}"><span>${names[b.condition]}</span><span class="track"><span class="fill" style="width:${b.meanPct}%"></span></span><b>${Math.round(b.meanPct)}%</b></div>`)
         .join("");
     }
+  } else if (hubOffline) {
+    const secs = hubOfflineSince !== null && m.tick >= 0 ? Math.max(0, missionNow(m.tick) - hubOfflineSince) : 0;
+    set(
+      "huboff",
+      `Hub offline ${secs}s. Every team is on its own.`,
+      "No relay between teams, no Gemini, n8n held. Each group still shares inside itself and keeps working.",
+    );
   } else if (crashBand(m, set)) {
     // set by crashBand
   } else if (dark.length > 0) {
@@ -622,6 +672,11 @@ function drawShell(m: Observe) {
 
 function onStatus(m: Status) {
   devices = m.devices;
+  hubOffline = !!m.hubOffline;
+  hubOfflineSince = m.hubOfflineSince ?? null;
+  document.body.classList.toggle("huboff", hubOffline);
+  $("hub-toggle").textContent = hubOffline ? "Bring hub online" : "Hub offline";
+  $("hub-toggle").classList.toggle("on", hubOffline);
   if (m.started && m.started.seed !== seed) {
     seed = m.started.seed;
     world = generateWorld(seed);
@@ -670,6 +725,7 @@ $("radio").onclick = async () => {
   $("radio").textContent = "Radio on";
 };
 $("n8n-toggle").onclick = () => void fetch("/api/n8n/toggle", { method: "POST" });
+$("hub-toggle").onclick = () => void fetch("/api/hub/toggle", { method: "POST" });
 // Crash buttons live in rows that redraw every update, so listen on the list.
 $("rows").addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest("button.crash") as HTMLButtonElement | null;

@@ -95,6 +95,30 @@
   .band.back { background: var(--link); color: #0a1433; }
   .band.done { background: var(--text); color: var(--bg); }
   .band.down { background: var(--red); color: #fff; }
+  /* Hub offline: hazard stripes, unmistakable and unlike every other state */
+  .band.huboff { background: repeating-linear-gradient(135deg, #3d0b16 0 16px, #2a0710 16px 32px); color: #ffe1e5; }
+  .band.huboff h1 { color: #fff; }
+  .btn.danger { background: rgba(255, 93, 113, .16); color: #ffb3bd; }
+  .btn.danger:hover { background: rgba(255, 93, 113, .28); }
+  .btn.danger.on { background: var(--red); color: #fff; }
+  body.huboff .map-wrap { outline: 2px dashed rgba(255, 93, 113, .7); outline-offset: 6px; border-radius: 14px; }
+  .chip.hub-off i { background: var(--red); }
+  .map-note { position: absolute; left: 34px; bottom: 10px; padding: 5px 11px; border-radius: 999px; background: rgba(10, 20, 51, .85); color: var(--text-2); font-size: 12px; font-weight: 600; display: none; }
+  body.huboff .map-note { display: block; }
+
+  /* Hub tower at base */
+  .m-hub .mast { stroke: var(--link); stroke-width: 2.2; stroke-linecap: round; fill: none; }
+  .m-hub .wave { fill: none; stroke: var(--link); stroke-width: 1.6; stroke-linecap: round; animation: wave 2s ease-out infinite; opacity: 0; }
+  .m-hub .wave.w2 { animation-delay: .6s; }
+  .m-hub .dot { fill: var(--link); }
+  .m-hub .x { display: none; stroke: var(--red); stroke-width: 3; stroke-linecap: round; }
+  .m-hub.off .mast { stroke: var(--red); } .m-hub.off .dot { fill: var(--red); }
+  .m-hub.off .wave { display: none; }
+  .m-hub.off .x { display: block; }
+  @keyframes wave { 0% { opacity: .9; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.4); } }
+  .m-group-fill { fill: var(--link); opacity: .07; }
+  .m-group-edge { fill: var(--link); opacity: .75; }
+  .m-group-label rect { fill: var(--link); } .m-group-label text { fill: var(--bg); font: 800 12px var(--font); }
   .ev.down .what { color: var(--red); font-weight: 700; }
   .ev.recovered .what { color: var(--link); }
   .results { display: none; gap: 7px; width: min(470px, 42vw); }
@@ -267,6 +291,7 @@
     <div class="spacer"></div>
     <div class="status"><span class="chip" id="gemini"><i></i>Gemini</span><span class="chip" id="n8n"><i></i>n8n</span></div>
     <div class="controls">
+      <button class="btn danger" id="hub-toggle" type="button">Hub offline</button>
       <button class="btn ghost" id="n8n-toggle" type="button">Cut n8n</button>
       <button class="btn ghost" id="start" type="button">Start mission</button>
       <button class="btn solid" id="radio" type="button">Turn on radio</button>
@@ -279,7 +304,7 @@
   </section>
 
   <main>
-    <div class="map-wrap"><svg id="map" role="img" aria-label="Map of actors, radio links and survivors as HQ knows them"></svg></div>
+    <div class="map-wrap"><svg id="map" role="img" aria-label="Map of actors, radio links and survivors as HQ knows them"></svg><span class="map-note">Hub offline: showing each device's own telemetry for the demo</span></div>
     <section class="side">
       <div>
         <div class="contact-head">

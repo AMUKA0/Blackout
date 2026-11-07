@@ -92,7 +92,7 @@ setInterval(() => {
   }
   const replaced = client.replaced;
   const linked = client.online;
-  document.body.classList.toggle("alone", !linked && !replaced && !!client.mission);
+  document.body.classList.toggle("alone", (!linked || client.hubOffline) && !replaced && !!client.mission);
   document.body.classList.toggle("replaced", replaced);
   if (replaced) {
     node?.stop();
@@ -107,8 +107,13 @@ setInterval(() => {
     $("word").textContent = linked ? "Linked" : "Offline";
     $("sub").textContent = linked ? "Waiting for HQ to start the mission." : "Looking for the hub.";
   } else {
-    $("word").textContent = linked ? "Linked" : "Alone";
-    $("sub").textContent = linked ? "In contact with the team." : "No radio, no Gemini. Still working on standing orders.";
+    const cutOff = !linked || client.hubOffline;
+    $("word").textContent = cutOff ? "Alone" : "Linked";
+    $("sub").textContent = !linked
+      ? "No radio, no Gemini. Still working on standing orders."
+      : client.hubOffline
+        ? "Hub offline. No relay, no Gemini. Still working on standing orders."
+        : "In contact with the team.";
   }
   $("doing").textContent = a ? (node!.reasons.get(a.spec.id) ?? "Sweeping my sector") : "Waiting for the mission to start.";
   $("found").textContent = String(found);

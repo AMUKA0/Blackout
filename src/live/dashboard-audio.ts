@@ -49,8 +49,14 @@ export class HqRadio {
     this.radio.say([clipUrl("HQ", line)], true);
   }
 
+  private hubOffline = false;
+
   onStatus(m: Status) {
     if (this.finished) return;
+    // Hub going down or coming back is announced straight away.
+    const off = !!m.hubOffline;
+    if (off !== this.hubOffline && m.started) this.hq(off ? "hubOffline" : "hubOnline");
+    this.hubOffline = off;
     for (const d of m.devices) {
       const before = this.online.get(d.device);
       this.online.set(d.device, d.online);
@@ -108,6 +114,8 @@ export class HqRadio {
       return;
     }
     if (quietEnd) return;
+    // With the hub down HQ hears nobody: no routine calls until it is back.
+    if (this.hubOffline) return;
     // Late reports first get a short summary, then the most important few.
     const late = fresh.filter((e) => e.late);
     const live = fresh.filter((e) => !e.late);

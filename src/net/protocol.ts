@@ -7,7 +7,9 @@ import type { ActorId, DeviceId, Pos } from "../shared/types.ts";
 // The hub plays the role of the air: it delivers an actor's broadcast only to
 // actors within radio range. It never tells an actor what to do.
 
-export const PORT = 8080;
+// Hub port; override with PORT (e.g. to run a second hub beside a live one).
+const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+export const PORT = Number(env?.PORT ?? 8080);
 export const HEARTBEAT_MS = 500;
 export const DEAD_AFTER_MS = 2000;
 
@@ -40,7 +42,7 @@ export type FromHub =
   | { type: "kicked"; reason: string } // another client took over this device
   | { type: "crash"; actor: ActorId } // operator crashed this drone from HQ
   | { type: "start"; t0: number; seed: number }
-  | { type: "status"; devices: DeviceStatus[]; started: Mission | null }
+  | { type: "status"; devices: DeviceStatus[]; started: Mission | null; hubOffline?: boolean; hubOfflineSince?: number | null }
   | { type: "relay"; from: ActorId; to: ActorId[]; tick: number; k: Knowledge }
   | { type: "truth"; survivor: number; tick: number; by: ActorId }
   | {
