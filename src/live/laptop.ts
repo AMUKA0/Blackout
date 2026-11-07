@@ -11,7 +11,8 @@ import { startDeviceView } from "./device-view.ts";
 
 const device = (process.argv[2] ?? "A") as DeviceId;
 const hub = process.env.HUB ?? "localhost";
-const client = new HubClient(device, `ws://${hub}:${PORT}`, (url) => new WebSocket(url) as never);
+const target = hub.includes(":") ? hub : `${hub}:${PORT}`; // HUB may carry its own port
+const client = new HubClient(device, `ws://${target}`, (url) => new WebSocket(url) as never);
 let node: LiveNode | null = null;
 let counts = new Map<string, { found: number; rescued: number }>();
 let offlineSince: number | null = null;
@@ -21,7 +22,9 @@ client.onMission = (m) => {
   counts = new Map();
   offlineSince = null;
   node = new LiveNode(device, client, m.seed, {
-    manualRadio: false,
+    // Real Wi-Fi is the radio switch: no scripted cut-off. Set
+    // SCRIPTED_RADIO=1 to bring back the automatic t28-t72 blackout.
+    manualRadio: process.env.SCRIPTED_RADIO !== "1",
     onEvent: (e) => {
       if (e.type !== "found" && e.type !== "rescued") return;
       const c = counts.get(e.actor) ?? { found: 0, rescued: 0 };

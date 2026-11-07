@@ -23,7 +23,7 @@ function render(s: DeviceViewState) {
     $("headline").textContent = off ? "Looking for the hub" : "Linked to the team";
     $("subline").textContent = "Waiting for the mission to start.";
   } else if (off) {
-    $("headline").textContent = `Radio off ${dark}s. Still working.`;
+    $("headline").textContent = `No contact ${dark}s. Still working.`;
     $("subline").textContent = "No hub, no Gemini. These actors keep sweeping and rescuing on their standing orders.";
   } else {
     $("headline").textContent = "Linked to the team";

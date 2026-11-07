@@ -15,7 +15,7 @@
     "n8n:deploy": "node --env-file-if-exists=.env.local scripts/n8n-deploy.ts",
     "laptop": "node src/live/laptop.ts",
     "a": "npm run build:web && node scripts/run-a.ts",
-    "b": "node src/live/laptop.ts B"
+    "b": "npm run build:web && node src/live/laptop.ts B"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
